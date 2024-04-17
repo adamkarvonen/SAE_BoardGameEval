@@ -1,10 +1,10 @@
 import torch
 from transformers import GPT2Config, GPT2LMHeadModel
 import os
-from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer, AddedToken
 import pickle
 
-from .nanogpt import GPT, GPTConfig
+from circuits.nanogpt import GPT, GPTConfig
 
 
 def nanogpt_to_hf(nanogpt_model, nanogpt_config: GPTConfig):
@@ -127,13 +127,46 @@ class NanogptTokenizer(PreTrainedTokenizer):
             meta = pickle.load(f)
 
         stoi, itos = meta["stoi"], meta["itos"]
+
+        num_chars = len(stoi)
+
+        special_tokens = {
+            "[CLS]": 0,
+            "[SEP]": 1,
+            "[BOS]": 2,
+            "[MASK]": 3,
+            "[PAD]": 4,
+            "[RESERVED]": 5,
+            "[UNK]": 6,
+        }
+
+        for special_token, idx in special_tokens.items():
+            stoi[special_token] = num_chars + idx
+            itos[num_chars + idx] = special_token
+
         self._vocab_size = len(stoi)
-        self._num_special_tokens = 0
+        self._num_special_tokens = len(special_tokens)
         self.stoi = stoi
         self.itos = itos
 
+        bos_token = AddedToken("[BOS]", lstrip=False, rstrip=False)
+        eos_token = AddedToken("[SEP]", lstrip=False, rstrip=False)
+        sep_token = AddedToken("[SEP]", lstrip=False, rstrip=False)
+        cls_token = AddedToken("[CLS]", lstrip=False, rstrip=False)
+        pad_token = AddedToken("[PAD]", lstrip=False, rstrip=False)
+        unk_token = AddedToken("[UNK]", lstrip=False, rstrip=False)
+
+        mask_token = AddedToken("[MASK]", lstrip=True, rstrip=False)
+
         super().__init__(
-            add_prefix_space=add_prefix_space,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            unk_token=unk_token,
+            add_prefix_space=False,
             model_max_length=model_max_length,
             **kwargs,
         )
