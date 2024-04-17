@@ -24,7 +24,7 @@ def nanogpt_to_hf(nanogpt_model, nanogpt_config: GPTConfig):
     # Initialize a new Hugging Face model with the specified configuration
     model_hf = GPT2LMHeadModel(config)
 
-    sd_nanogpt = nanogpt_model
+    sd_nanogpt = nanogpt_model.state_dict()
     sd_hf = model_hf.state_dict()
 
     # Adjust the names and orientation of weights as necessary
