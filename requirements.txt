@@ -11,3 +11,4 @@ umap-learn>=0.5.6
 zstandard>=0.22.0
 pytest>=8.1.1
 transformers>=4.39.3
+wandb>=0.16.0
