@@ -1,3 +1,4 @@
 [submodule "circuits/dictionary_learning"]
 	path = circuits/dictionary_learning
 	url = https://github.com/saprmarks/dictionary_learning.git
+	branch = collab
