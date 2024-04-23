@@ -1,40 +1,58 @@
 from nnsight import LanguageModel
+import torch
+
 from dictionary_learning import ActivationBuffer
 from dictionary_learning.training import trainSAE
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
+from dictionary_learning.utils import hf_dataset_to_generator
+from dictionary_learning.trainers.standard import StandardTrainer
 
-import torch
-
-device = torch.device("cuda:0")
+DEVICE = torch.device("cuda:0")
 
 tokenizer = NanogptTokenizer()
-model = convert_nanogpt_model("lichess_6layers_ckpt_no_optimizer.pt", torch.device(device))
-model = LanguageModel(model, device_map=device, tokenizer=tokenizer)
+model = convert_nanogpt_model("lichess_8layers_ckpt_no_optimizer.pt", torch.device(DEVICE))
+model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer)
 
-submodule = model.transformer.h[-1].mlp  # layer 1 MLP
-activation_dim = 128  # output dimension of the MLP
-dictionary_size = 16 * activation_dim
+submodule = model.transformer.h[5].mlp  # layer 1 MLP
+activation_dim = 512  # output dimension of the MLP
+dictionary_size = 8 * activation_dim
 
-strs = [";1.e4 c5 2.Nf3 d6 3"] * 30000
 
-data = iter(strs)
+data = hf_dataset_to_generator("adamkarvonen/chess_sae_text")
 buffer = ActivationBuffer(
     data,
     model,
     submodule,
-    submodule_output_dim=activation_dim,  # output dimension of the model component
-    n_ctxs=3000,  # you can set this higher or lower dependong on your available memory
-    device=device,  # doesn't have to be the same device that you train your autoencoder on
-)  # buffer will return batches of tensors of dimension = submodule's output dimension
+    n_ctxs=8e3,
+    ctx_len=256,
+    refresh_batch_size=128,
+    io="out",
+    d_submodule=512,
+    device=DEVICE,
+)
 
-# train the sparse autoencoder (SAE)
-ae = trainSAE(
+trainSAE(
     buffer,
-    activation_dim,
-    dictionary_size,
-    lr=3e-4,
-    sparsity_penalty=1e-3,
-    device=device,
-    resample_steps=25000,
-    warmup_steps=1000,
+    activation_dim=activation_dim,
+    dictionary_size=dictionary_size,
+    trainer_configs=[
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-4,
+            "l1_penalty": 1e-3,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-4,
+            "l1_penalty": 1e-4,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+    ],
+    steps=300000,
+    save_steps=150000,
+    save_dirs=["test1", "test2"],
+    log_steps=1000,
 )
