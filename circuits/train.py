@@ -7,7 +7,7 @@ from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogp
 from dictionary_learning.utils import hf_dataset_to_generator
 from dictionary_learning.trainers.standard import StandardTrainer
 
-DEVICE = torch.device("cuda:0")
+DEVICE = "cuda"
 
 tokenizer = NanogptTokenizer()
 model = convert_nanogpt_model("lichess_8layers_ckpt_no_optimizer.pt", torch.device(DEVICE))
@@ -15,7 +15,7 @@ model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer)
 
 submodule = model.transformer.h[5].mlp  # layer 1 MLP
 activation_dim = 512  # output dimension of the MLP
-dictionary_size = 8 * activation_dim
+dictionary_size = 16 * activation_dim
 
 
 data = hf_dataset_to_generator("adamkarvonen/chess_sae_text")
@@ -39,20 +39,76 @@ trainSAE(
         {
             "trainer": StandardTrainer,
             "lr": 1e-4,
-            "l1_penalty": 1e-3,
+            "l1_penalty": 1e-2,
             "warmup_steps": 2000,
             "resample_steps": 150000,
         },
         {
             "trainer": StandardTrainer,
             "lr": 1e-4,
-            "l1_penalty": 1e-4,
+            "l1_penalty": 3e-2,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-4,
+            "l1_penalty": 6e-2,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-4,
+            "l1_penalty": 1e-1,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-4,
+            "l1_penalty": 3e-1,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-3,
+            "l1_penalty": 1e-2,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-3,
+            "l1_penalty": 3e-2,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-3,
+            "l1_penalty": 6e-2,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-3,
+            "l1_penalty": 1e-1,
+            "warmup_steps": 2000,
+            "resample_steps": 150000,
+        },
+        {
+            "trainer": StandardTrainer,
+            "lr": 1e-3,
+            "l1_penalty": 3e-1,
             "warmup_steps": 2000,
             "resample_steps": 150000,
         },
     ],
     steps=300000,
     save_steps=150000,
-    save_dirs=["test1", "test2"],
+    save_dir="",
     log_steps=1000,
 )
