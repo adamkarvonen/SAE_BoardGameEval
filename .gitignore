@@ -3,3 +3,8 @@ __pycache__/
 wandb/
 .pytest_cache/
 **.pt
+
+autoencoders/*
+
+!autoencoders/README.md
+!autoencoders/utils/
