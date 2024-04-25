@@ -28,8 +28,6 @@ def test_tokenizer():
     enc = torch.tensor(enc).unsqueeze(0)
     nanogpt_enc = torch.tensor([stoi[c] for c in test_str]).unsqueeze(0)
 
-    # tokenizer.save_vocabulary("models")
-
     assert torch.equal(enc, nanogpt_enc)
 
 
@@ -47,8 +45,6 @@ def test_model_conversion():
     meta = load_meta()
     stoi, itos = meta["stoi"], meta["itos"]
     enc = torch.tensor([stoi[c] for c in test_str]).unsqueeze(0)
-
-    hf_model.save_pretrained("models")
 
     hf_response = hf_model.generate(enc, max_length=len(test_str) + 40, do_sample=False)
     nanogpt_response = nanogpt_model.generate(enc, max_new_tokens=40, temperature=0.0)
