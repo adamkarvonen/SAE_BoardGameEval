@@ -86,8 +86,7 @@ def add_zeros_bias_to_state_dict(
     return state_dict, config
 
 
-def get_nanogpt_model_and_config(model_name: str, device: torch.device) -> tuple[GPT, GPTConfig]:
-    model_path = os.path.join("models", model_name)
+def get_nanogpt_model_and_config(model_path: str, device: torch.device) -> tuple[GPT, GPTConfig]:
     checkpoint = torch.load(model_path, map_location=device)
     nanogpt_config = GPTConfig(**checkpoint["model_args"])
 
