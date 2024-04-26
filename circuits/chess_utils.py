@@ -133,6 +133,16 @@ def board_to_threat_state(board: chess.Board, skill: Optional[int] = None) -> to
     return state
 
 
+def board_to_check_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array should tell if the current player is in check.
+    1 = In check, 0 = Not in check."""
+    state = torch.zeros((1, 1), dtype=torch.int)
+    state[0][0] = 1 if board.is_check() else 0
+
+    return state
+
+
 def board_to_prev_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return an 8x8 torch.Tensor.
     The 8x8 array should tell what piece is on each square at a previous board state."""
@@ -646,6 +656,14 @@ skill_config = Config(
     min_val=-2,
     max_val=20,
     custom_board_state_function=board_to_skill_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+check_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_check_state,
     num_rows=1,
     num_cols=1,
 )
