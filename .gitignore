@@ -8,3 +8,6 @@ autoencoders/*
 
 !autoencoders/README.md
 !autoencoders/utils/
+
+models/*
+!models/meta.pkl
