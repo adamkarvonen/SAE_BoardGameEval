@@ -489,6 +489,7 @@ def get_all_black_pos_indices(moves_string: str) -> list[list[int]]:
 
 def find_num_indices(moves_string: str) -> list[int]:
     """Returns a list of ints of indices of every `counting number.` in the PGN string.
+    In this case, it would be the characters in angle brackets: ;<1.>e4 e5 <2.>Nf3
     Example: ;1.e4 e5 2. would be [1,2,9,10]. nums in moves like e4 / e5 are not counted.
     """
 
@@ -591,3 +592,114 @@ def decode_list(meta: dict, l: list[int]) -> str:
     """Decode a list of integers into a string."""
     itos = meta["itos"]
     return "".join([itos[i] for i in l])
+
+
+@dataclass
+class Config:
+    min_val: int
+    max_val: int
+    custom_board_state_function: callable
+    num_rows: int = 8
+    num_cols: int = 8
+
+
+piece_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_piece_state,
+)
+
+color_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=board_to_piece_color_state,
+)
+
+threat_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_threat_state,
+)
+
+legal_move_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_legal_moves_state,
+)
+
+prev_move_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_prev_state,
+)
+
+
+eval_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=board_to_eval_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+skill_config = Config(
+    min_val=-2,
+    max_val=20,
+    custom_board_state_function=board_to_skill_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+
+def chess_boards_to_state_stack(
+    chess_boards: list[chess.Board],
+    device: torch.device,
+    config: Config,
+    skill: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    one_hot_list = []
+
+    for board in chess_boards:
+        state_stack = config.custom_board_state_function(board, skill)
+        state_stack = state_stack.view(1, 1, 1, config.num_rows, config.num_cols)
+        one_hot = state_stack_to_one_hot(
+            1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
+        )
+        one_hot_list.append(one_hot)
+    stacked_one_hot = torch.stack(one_hot_list, dim=0)
+    return stacked_one_hot
+
+
+def mask_initial_board_states(
+    one_hot_list: torch.Tensor,
+    device: torch.device,
+    config: Config,
+    skill: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    """Mask off all board states that are shared with the initial board state.
+    Otherwise the initial board state will dominate the common states."""
+    initial_board = chess.Board()
+    initial_state = config.custom_board_state_function(initial_board, skill)
+    initial_state = initial_state.view(1, 1, 1, config.num_rows, config.num_cols)
+    initial_one_hot = state_stack_to_one_hot(
+        1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, initial_state
+    )
+
+    mask = (initial_one_hot == 1) & (one_hot_list == 1)
+    one_hot_list[mask] = 0
+    return one_hot_list
+
+
+def get_averaged_states(one_hot_stack: torch.Tensor) -> torch.Tensor:
+    summed_one_hot = torch.sum(one_hot_stack, dim=0)
+    averaged_one_hot = summed_one_hot / one_hot_stack.shape[0]
+    averaged_one_hot = averaged_one_hot.squeeze()
+    return averaged_one_hot
+
+
+def find_common_states(
+    averaged_one_hot: torch.Tensor, threshold: float
+) -> tuple[torch.Tensor, ...]:
+    greater_than_threshold = averaged_one_hot >= threshold
+    indices = torch.nonzero(greater_than_threshold, as_tuple=True)
+    return indices
