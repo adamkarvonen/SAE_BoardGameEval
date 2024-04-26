@@ -143,6 +143,23 @@ def board_to_check_state(board: chess.Board, skill: Optional[int] = None) -> tor
     return state
 
 
+def board_to_pin_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates if there are any pins on the board (1 = yes, 0 = no)."""
+
+    state = torch.zeros((1, 1), dtype=torch.int)
+
+    for color in [chess.WHITE, chess.BLACK]:
+        for i in range(64):
+            piece = board.piece_at(i)
+            if piece and piece.color == color:
+                if board.is_pinned(color, i):
+                    state[0, 0] = 1
+                    return state
+
+    return state
+
+
 def board_to_prev_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return an 8x8 torch.Tensor.
     The 8x8 array should tell what piece is on each square at a previous board state."""
@@ -664,6 +681,14 @@ check_config = Config(
     min_val=0,
     max_val=1,
     custom_board_state_function=board_to_check_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+pin_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_pin_state,
     num_rows=1,
     num_cols=1,
 )
