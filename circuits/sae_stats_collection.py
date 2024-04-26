@@ -1,7 +1,6 @@
 import os
 from nnsight import LanguageModel
 import torch
-import matplotlib.pyplot as plt
 import chess
 import json
 import pickle
@@ -10,7 +9,7 @@ from circuits.dictionary_learning import ActivationBuffer
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 from circuits.dictionary_learning.utils import hf_dataset_to_generator
 from circuits.dictionary_learning import AutoEncoder
-from circuits.dictionary_learning.interp import examine_dimension_chess
+from circuits.chess_interp import examine_dimension_chess
 
 import circuits.chess_utils
 
@@ -19,17 +18,20 @@ MODEL_PATH = "models/lichess_8layers_ckpt_no_optimizer.pt"
 batch_size = 8
 
 
-def get_folders(path: str) -> list[str]:
+def get_nested_folders(path: str) -> list[str]:
+    """Get a list of folders nested one level deep in the given path."""
     folder_names = []
-    for folder_name in os.listdir(path):
-
-        if not os.path.isdir(path + folder_name):
-            continue
-
-        if folder_name == "utils":
-            continue
-
-        folder_names.append(path + folder_name + "/")
+    # Process current directory and one level deep subdirectories
+    for folder in os.listdir(path):
+        current_folder = os.path.join(path, folder)
+        if os.path.isdir(current_folder):
+            if "ae.pt" in os.listdir(current_folder):
+                folder_names.append(current_folder)
+            for subfolder in os.listdir(current_folder):  # Process subfolders
+                subfolder_path = os.path.join(current_folder, subfolder)
+                if os.path.isdir(subfolder_path):
+                    if "ae.pt" in os.listdir(subfolder_path):
+                        folder_names.append(subfolder_path)
 
     return folder_names
 
@@ -52,7 +54,7 @@ def get_feature(
     return f
 
 
-def get_ae_stats(autoencoder_path: str) -> dict:
+def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> dict:
 
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
@@ -64,7 +66,7 @@ def get_ae_stats(autoencoder_path: str) -> dict:
     context_length = config["buffer"]["ctx_len"]
     layer = config["trainer"]["layer"]
 
-    tokenizer = NanogptTokenizer()
+    tokenizer = NanogptTokenizer(meta_path="models/meta.pkl")
     model = convert_nanogpt_model(MODEL_PATH, torch.device(DEVICE))
     model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer).to(DEVICE)
 
@@ -109,19 +111,20 @@ def get_ae_stats(autoencoder_path: str) -> dict:
         buffer,
         dictionary=ae,
         dims=idx[:],
-        n_inputs=1000,
-        k=40,
-        batch_size=25,
-        device=DEVICE,
+        n_inputs=5000,
+        k=50,
+        batch_size=10,
+        processing_device=torch.device("cpu"),
     )
 
-    pickle.dump(per_dim_stats, open(f"{autoencoder_path}per_dim_stats.pkl", "wb"))
+    if save_results:
+        pickle.dump(per_dim_stats, open(f"{autoencoder_path}per_dim_stats.pkl", "wb"))
 
     return per_dim_stats
 
 
-folders = get_folders("autoencoders/")
-
-for folder in folders:
-    get_ae_stats(folder)
-    print(f"Finished {folder}")
+def compute_all_ae_stats(folder: str):
+    folders = get_nested_folders(folder)
+    for folder in folders:
+        get_ae_stats(folder, save_results=True)
+        print(f"Finished {folder}")
