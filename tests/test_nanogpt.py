@@ -22,7 +22,7 @@ def test_tokenizer():
     meta = load_meta()
     stoi, itos = meta["stoi"], meta["itos"]
 
-    tokenizer = nanogpt_to_hf_transformers.NanogptTokenizer()
+    tokenizer = nanogpt_to_hf_transformers.NanogptTokenizer("models/meta.pkl")
 
     enc = tokenizer.encode(test_str)
     enc = torch.tensor(enc).unsqueeze(0)
