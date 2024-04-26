@@ -116,11 +116,11 @@ class NanogptTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
+        meta_path: str,
         add_prefix_space=False,
         model_max_length=2048,
         **kwargs,
     ):
-        meta_path = "models/meta.pkl"
 
         with open(meta_path, "rb") as f:
             meta = pickle.load(f)
