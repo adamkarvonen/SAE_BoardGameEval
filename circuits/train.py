@@ -9,9 +9,9 @@ from dictionary_learning.trainers.standard import StandardTrainer
 
 DEVICE = "cuda"
 
-tokenizer = NanogptTokenizer()
-model = convert_nanogpt_model("lichess_8layers_ckpt_no_optimizer.pt", torch.device(DEVICE))
-model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer)
+tokenizer = NanogptTokenizer("models/meta.pkl")
+model = convert_nanogpt_model("models/lichess_8layers_ckpt_no_optimizer.pt", torch.device(DEVICE))
+model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer).to(DEVICE)
 
 submodule = model.transformer.h[5].mlp  # layer 1 MLP
 activation_dim = 512  # output dimension of the MLP
