@@ -155,7 +155,7 @@ def syntax_analysis(
     max_dims: int,
     syntax_function: callable,
     verbose: bool = False,
-) -> dict:
+) -> SyntaxResultsConfig:
 
     results = SyntaxResultsConfig()
 
@@ -219,7 +219,7 @@ def board_analysis(
     configs: list[Config],
     device: str = "cpu",
     verbose: bool = False,
-) -> dict:
+) -> dict[str, BoardResultsConfig]:
 
     nonzero_count = 0
     dim_count = 0
