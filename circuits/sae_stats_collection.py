@@ -3,6 +3,7 @@ from nnsight import LanguageModel
 import torch
 import json
 import pickle
+import gc
 
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning.utils import hf_dataset_to_generator
@@ -114,7 +115,7 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
         submodule,
         buffer,
         dictionary=ae,
-        dims=idx[:],
+        dims=idx[:4000],
         n_inputs=5000,
         k=TOP_K + 1,
         batch_size=25,
@@ -167,14 +168,16 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
                 per_dim_stats, TOP_K, TOP_K, max_dims, metric
             )
         for metric in metrics["board"]:
-            metric_name = metric.custom_board_state_function.__name__
-            results["board"][metric_name] = chess_interp.board_analysis(
-                per_dim_stats, TOP_K, TOP_K, max_dims, 0.99, metric
+            results["board"] = chess_interp.board_analysis(
+                per_dim_stats, TOP_K, TOP_K, max_dims, 0.99, metrics["board"]
             )
-
         total_results[folder] = results
 
         print(f"Finished {folder}")
+
+        del per_dim_stats
+        del eval_results
+        gc.collect()
 
     json.dump(total_results, open(f"total_results.json", "w"))
 
