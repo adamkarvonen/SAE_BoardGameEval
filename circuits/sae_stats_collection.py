@@ -1,21 +1,23 @@
 import os
 from nnsight import LanguageModel
 import torch
-import chess
 import json
 import pickle
 
 from circuits.dictionary_learning import ActivationBuffer
-from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 from circuits.dictionary_learning.utils import hf_dataset_to_generator
 from circuits.dictionary_learning import AutoEncoder
-from circuits.chess_interp import examine_dimension_chess
+from circuits.dictionary_learning.evaluation import evaluate
 
-import circuits.chess_utils
+from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
+from circuits.chess_interp import examine_dimension_chess
+import circuits.chess_utils as chess_utils
+import circuits.chess_interp as chess_interp
 
 DEVICE = torch.device("cuda")
 MODEL_PATH = "models/lichess_8layers_ckpt_no_optimizer.pt"
 batch_size = 8
+TOP_K = 30
 
 
 def get_nested_folders(path: str) -> list[str]:
@@ -23,15 +25,17 @@ def get_nested_folders(path: str) -> list[str]:
     folder_names = []
     # Process current directory and one level deep subdirectories
     for folder in os.listdir(path):
+        if folder == "utils":
+            continue
         current_folder = os.path.join(path, folder)
         if os.path.isdir(current_folder):
             if "ae.pt" in os.listdir(current_folder):
-                folder_names.append(current_folder)
+                folder_names.append(current_folder + "/")
             for subfolder in os.listdir(current_folder):  # Process subfolders
                 subfolder_path = os.path.join(current_folder, subfolder)
                 if os.path.isdir(subfolder_path):
                     if "ae.pt" in os.listdir(subfolder_path):
-                        folder_names.append(subfolder_path)
+                        folder_names.append(subfolder_path + "/")
 
     return folder_names
 
@@ -54,7 +58,7 @@ def get_feature(
     return f
 
 
-def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> dict:
+def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dict, dict]:
 
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
@@ -112,19 +116,68 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> dict:
         dictionary=ae,
         dims=idx[:],
         n_inputs=5000,
-        k=50,
+        k=TOP_K,
         batch_size=10,
         processing_device=torch.device("cpu"),
+    )
+
+    eval_results = evaluate(
+        ae, buffer, max_len=context_length, batch_size=batch_size, io="out", device=DEVICE
     )
 
     if save_results:
         pickle.dump(per_dim_stats, open(f"{autoencoder_path}per_dim_stats.pkl", "wb"))
 
-    return per_dim_stats
+    return per_dim_stats, eval_results
 
 
-def compute_all_ae_stats(folder: str):
+def compute_all_ae_stats(folder: str, save_results: bool = False):
+
+    metrics = {}
+    max_dims = 10000
+
+    metrics["syntax"] = [
+        chess_utils.find_num_indices,
+        chess_utils.find_spaces_indices,
+        chess_utils.find_dots_indices,
+    ]
+    metrics["board"] = [
+        chess_utils.piece_config,
+        chess_utils.threat_config,
+        chess_utils.check_config,
+        chess_utils.pin_config,
+    ]
+
     folders = get_nested_folders(folder)
+
+    print(f"Found {len(folders)} folders.")
+
+    total_results = {}
     for folder in folders:
-        get_ae_stats(folder, save_results=True)
+        print(f"Starting {folder}")
+        per_dim_stats, eval_results = get_ae_stats(folder, save_results=save_results)
+        results = {}
+        results["syntax"] = {}
+        results["board"] = {}
+        results["eval_results"] = eval_results
+
+        for metric in metrics["syntax"]:
+            metric_name = metric.__name__
+            results["syntax"][metric_name] = chess_interp.syntax_analysis(
+                per_dim_stats, TOP_K, TOP_K, max_dims, metric
+            )
+        for metric in metrics["board"]:
+            metric_name = metric.custom_board_state_function.__name__
+            results["board"][metric_name] = chess_interp.board_analysis(
+                per_dim_stats, TOP_K, TOP_K, max_dims, 0.99, metric
+            )
+
+        total_results[folder] = results
+
         print(f"Finished {folder}")
+
+    json.dump(total_results, open(f"total_results.json", "w"))
+
+
+if __name__ == "__main__":
+    compute_all_ae_stats("autoencoders/")
