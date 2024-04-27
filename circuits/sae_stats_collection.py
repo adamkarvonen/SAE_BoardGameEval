@@ -17,8 +17,10 @@ import circuits.chess_interp as chess_interp
 
 DEVICE = torch.device("cuda")
 MODEL_PATH = "models/lichess_8layers_ckpt_no_optimizer.pt"
-batch_size = 8
+BATCH_SIZE = 8
 TOP_K = 30
+MAX_DIMS = 10000
+N_INPUTS = 5000
 
 
 def get_nested_folders(path: str) -> list[str]:
@@ -87,21 +89,21 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
         submodule,
         n_ctxs=512,
         ctx_len=context_length,
-        refresh_batch_size=batch_size,
+        refresh_batch_size=BATCH_SIZE,
         io="out",
         d_submodule=activation_dim,
         device=DEVICE,
-        out_batch_size=batch_size,
+        out_batch_size=BATCH_SIZE,
     )
 
     total_inputs = 8192
-    assert total_inputs % batch_size == 0
-    num_iters = total_inputs // batch_size
+    assert total_inputs % BATCH_SIZE == 0
+    num_iters = total_inputs // BATCH_SIZE
 
     features = torch.zeros((total_inputs, dictionary_size), device=DEVICE)
     for i in range(num_iters):
         feature = get_feature(buffer, ae, DEVICE)  # (batch_size, dictionary_size)
-        features[i * batch_size : (i + 1) * batch_size, :] = feature
+        features[i * BATCH_SIZE : (i + 1) * BATCH_SIZE, :] = feature
 
     firing_rate_per_feature = (features != 0).float().sum(dim=0) / total_inputs
 
@@ -115,15 +117,15 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
         submodule,
         buffer,
         dictionary=ae,
-        dims=idx[:4000],
-        n_inputs=5000,
+        dims=idx[:MAX_DIMS],
+        n_inputs=N_INPUTS,
         k=TOP_K + 1,
         batch_size=25,
         processing_device=torch.device("cpu"),
     )
 
     eval_results = evaluate(
-        ae, buffer, max_len=context_length, batch_size=batch_size, io="out", device=DEVICE
+        ae, buffer, max_len=context_length, batch_size=BATCH_SIZE, io="out", device=DEVICE
     )
 
     if save_results:
@@ -133,8 +135,6 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
 
 
 def compute_all_ae_stats(folder: str, save_results: bool = False):
-
-    max_dims = 10000
 
     syntax_metrics = [
         chess_utils.find_num_indices,
@@ -163,10 +163,10 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         for metric in syntax_metrics:
             metric_name = metric.__name__
             results["syntax"][metric_name] = chess_interp.syntax_analysis(
-                per_dim_stats, TOP_K, TOP_K, max_dims, metric
+                per_dim_stats, TOP_K, TOP_K, MAX_DIMS, metric
             )
         results["board"] = chess_interp.board_analysis(
-            per_dim_stats, TOP_K, TOP_K, max_dims, 0.99, board_metrics
+            per_dim_stats, TOP_K, TOP_K, MAX_DIMS, 0.99, board_metrics
         )
         total_results[folder] = results
 
@@ -177,6 +177,10 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         gc.collect()
 
     total_results = chess_interp.serialize_results(total_results)
+    total_results["hyperparameters"] = {}
+    total_results["hyperparameters"]["n_inputs"] = N_INPUTS
+    total_results["hyperparameters"]["top_k"] = TOP_K
+    total_results["hyperparameters"]["max_dims"] = MAX_DIMS
     json.dump(total_results, open(f"total_results.json", "w"))
 
 
