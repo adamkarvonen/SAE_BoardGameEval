@@ -5,6 +5,36 @@ from tqdm import tqdm
 import chess_utils
 from chess_utils import Config
 
+from pydantic import BaseModel
+
+
+class BoardResultsConfig(BaseModel):
+    dim_count: int = 0
+    nonzero_count: int = 0
+    pattern_match_count: int = 0
+    total_average_length: float = 0.0
+    average_matches_per_dim: float = 0.0
+    per_class_dict: dict[int, int]
+    board_tracker: list[list[int]]  # shape: (num_rows, num_cols)
+
+
+class SyntaxResultsConfig(BaseModel):
+    dim_count: int = 0
+    nonzero_count: int = 0
+    syntax_match_idx_count: int = 0
+    average_input_length: float = 0.0
+
+
+def serialize_results(data):
+    if isinstance(data, BaseModel):
+        return data.model_dump()
+    elif isinstance(data, dict):
+        return {key: serialize_results(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [serialize_results(item) for item in data]
+    else:
+        return data
+
 
 @torch.no_grad()
 def examine_dimension_chess(
@@ -127,15 +157,11 @@ def syntax_analysis(
     verbose: bool = False,
 ) -> dict:
 
-    nonzero_count = 0
-    syntax_match_idx_count = 0
-    dim_count = 0
-    average_input_length = 0
-    length_tracker = []
+    results = SyntaxResultsConfig()
 
     for dim in per_dim_stats:
-        dim_count += 1
-        if dim_count > max_dims:
+        results.dim_count += 1
+        if results.dim_count > max_dims:
             break
 
         decoded_tokens = per_dim_stats[dim]["decoded_tokens"]
@@ -143,7 +169,7 @@ def syntax_analysis(
         # If the dim doesn't have at least 10 firing activations, skip it
         if activations[minimum_number_of_activations][-1].item() == 0:
             continue
-        nonzero_count += 1
+        results.nonzero_count += 1
 
         inputs = ["".join(string) for string in decoded_tokens]
         inputs = inputs[:top_k]
@@ -160,34 +186,26 @@ def syntax_analysis(
             # Then we count this firing as a "number index firing"
             if (len(pgn) - 1) in nums:
                 count += 1
-                average_input_length = sum(len(pgn) for pgn in inputs) / len(inputs)
-                length_tracker.append(average_input_length)
 
         if count == top_k:
             # print(f"All top {top_k} activations in dim: {dim} are on num indices")
-            syntax_match_idx_count += 1
+            results.syntax_match_idx_count += 1
+            average_input_length = sum(len(pgn) for pgn in inputs[:top_k]) / len(inputs[:top_k])
+            results.average_input_length += average_input_length
 
-    total_average_length = -1
-    if len(length_tracker) > 0:
-        total_average_length = sum(length_tracker) / len(length_tracker)
+    if results.syntax_match_idx_count > 0:
+        results.average_input_length /= results.syntax_match_idx_count
 
     if verbose:
         print(
-            f"Out of {len(per_dim_stats)} features, {nonzero_count} had at least {minimum_number_of_activations} activations."
+            f"Out of {len(per_dim_stats)} features, {results.nonzero_count} had at least {minimum_number_of_activations} activations."
         )
         print(
-            f"{syntax_match_idx_count} features matched on all top {top_k} inputs for our syntax function {syntax_function.__name__}"
+            f"{results.syntax_match_idx_count} features matched on all top {top_k} inputs for our syntax function {syntax_function.__name__}"
         )
         print(
-            f"The average length of inputs of pattern matching features was {total_average_length}"
+            f"The average length of inputs of pattern matching features was {results.average_input_length:.2f}"
         )
-
-    results = {}
-
-    results["dim_count"] = dim_count
-    results["nonzero_count"] = nonzero_count
-    results["syntax_match_idx_count"] = syntax_match_idx_count
-    results["average_input_length"] = total_average_length
 
     return results
 
@@ -206,20 +224,17 @@ def board_analysis(
     nonzero_count = 0
     dim_count = 0
 
-    results = {}
+    results: dict[str, BoardResultsConfig] = {}
 
     for config in configs:
-        board_tracker = torch.zeros(config.num_rows, config.num_cols, device=device)
+        board_tracker = torch.zeros(config.num_rows, config.num_cols).tolist()
         num_classes = abs(config.min_val) + abs(config.max_val) + 1
         per_class_dict = {key: 0 for key in range(0, num_classes)}
 
-        results[config.custom_board_state_function.__name__] = {
-            "pattern_match_count": 0,
-            "total_average_length": 0,
-            "average_matches_per_dim": 0,
-            "per_class_dict": per_class_dict,
-            "board_tracker": board_tracker,
-        }
+        results[config.custom_board_state_function.__name__] = BoardResultsConfig(
+            per_class_dict=per_class_dict,
+            board_tracker=board_tracker,
+        )
 
     for dim in tqdm(per_dim_stats, total=len(per_dim_stats), desc="Processing chess pgn strings"):
         dim_count += 1
@@ -235,6 +250,7 @@ def board_analysis(
 
         inputs = ["".join(string) for string in decoded_tokens]
         inputs = inputs[:top_k]
+
         count = 0
 
         chess_boards = [
@@ -250,38 +266,34 @@ def board_analysis(
             averaged_one_hot = chess_utils.get_averaged_states(one_hot_list)
             common_indices = chess_utils.find_common_states(averaged_one_hot, threshold)
 
-            if any(len(idx) > 0 for idx in common_indices):
-                results[config_name][
-                    "pattern_match_count"
-                ] += 1  # Increment if there are nonzero indices
+            if any(len(idx) > 0 for idx in common_indices):  # if at least one square matches
+                results[config_name].pattern_match_count += 1
                 average_input_length = sum(len(pgn) for pgn in inputs) / len(inputs)
-                results[config_name]["total_average_length"] += average_input_length
+                results[config_name].total_average_length += average_input_length
 
             if config.num_rows == 8:
                 for idx in zip(*common_indices):
                     value = averaged_one_hot[idx].item()
                     # print(f"Dim: {dim}, Average input length: {int(average_input_length):04}, Value: {value:.2f} at Index: {idx}")
-                    results[config_name]["board_tracker"][idx[0], idx[1]] += 1
-                    results[config_name]["per_class_dict"][idx[2].item()] += 1
-                    results[config_name]["average_matches_per_dim"] += 1
+                    results[config_name].board_tracker[idx[0]][idx[1]] += 1
+                    results[config_name].per_class_dict[idx[2].item()] += 1
+                    results[config_name].average_matches_per_dim += 1
 
     for config in configs:
         config_name = config.custom_board_state_function.__name__
-        match_count = results[config_name]["pattern_match_count"]
-        results[config_name]["dim_count"] = dim_count
-        results[config_name]["nonzero_count"] = nonzero_count
-        results[config_name]["board_tracker"] = (
-            results[config_name]["board_tracker"].flip(0).tolist()
-        )
+        match_count = results[config_name].pattern_match_count
+        results[config_name].dim_count = dim_count
+        results[config_name].nonzero_count = nonzero_count
+        results[config_name].board_tracker = results[config_name].board_tracker
         if match_count > 0:
-            results[config_name]["total_average_length"] /= match_count
-            results[config_name]["average_matches_per_dim"] /= match_count
+            results[config_name].total_average_length /= match_count
+            results[config_name].average_matches_per_dim /= match_count
 
     if verbose:
         for config in configs:
             config_name = config.custom_board_state_function.__name__
-            pattern_match_count = results[config_name]["pattern_match_count"]
-            total_average_length = results[config_name]["total_average_length"]
+            pattern_match_count = results[config_name].pattern_match_count
+            total_average_length = results[config_name].total_average_length
             print(f"\n{config_name} Results:")
             print(
                 f"Out of {dim_count} features, {nonzero_count} had at least {minimum_number_of_activations} activations."
@@ -294,14 +306,15 @@ def board_analysis(
             )
 
             if config.num_rows == 8:
-                per_class_dict = results[config_name]["per_class_dict"]
-                board_tracker = results[config_name]["board_tracker"]
+                board_tracker = results[config_name].board_tracker
                 print(f"\nThe following square states had the following number of occurances:")
-                for key, count in per_class_dict.items():
+                for key, count in results[config_name].per_class_dict.items():
                     print(f"Index: {key}, Count: {count}")
 
                 print(f"\nHere are the most common squares:")
-                board_tracker = torch.tensor(board_tracker)  # torch.tensor has a cleaner printout
+                board_tracker = torch.tensor(board_tracker).flip(
+                    0
+                )  # torch.tensor has a cleaner printout
                 print(board_tracker)
 
     return results

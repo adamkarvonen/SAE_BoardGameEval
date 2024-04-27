@@ -134,15 +134,14 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
 
 def compute_all_ae_stats(folder: str, save_results: bool = False):
 
-    metrics = {}
     max_dims = 10000
 
-    metrics["syntax"] = [
+    syntax_metrics = [
         chess_utils.find_num_indices,
         chess_utils.find_spaces_indices,
         chess_utils.find_dots_indices,
     ]
-    metrics["board"] = [
+    board_metrics = [
         chess_utils.piece_config,
         chess_utils.threat_config,
         chess_utils.check_config,
@@ -159,18 +158,16 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         per_dim_stats, eval_results = get_ae_stats(folder, save_results=save_results)
         results = {}
         results["syntax"] = {}
-        results["board"] = {}
         results["eval_results"] = eval_results
 
-        for metric in metrics["syntax"]:
+        for metric in syntax_metrics:
             metric_name = metric.__name__
             results["syntax"][metric_name] = chess_interp.syntax_analysis(
                 per_dim_stats, TOP_K, TOP_K, max_dims, metric
             )
-        for metric in metrics["board"]:
-            results["board"] = chess_interp.board_analysis(
-                per_dim_stats, TOP_K, TOP_K, max_dims, 0.99, metrics["board"]
-            )
+        results["board"] = chess_interp.board_analysis(
+            per_dim_stats, TOP_K, TOP_K, max_dims, 0.99, board_metrics
+        )
         total_results[folder] = results
 
         print(f"Finished {folder}")
@@ -179,6 +176,7 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         del eval_results
         gc.collect()
 
+    total_results = chess_interp.serialize_results(total_results)
     json.dump(total_results, open(f"total_results.json", "w"))
 
 
