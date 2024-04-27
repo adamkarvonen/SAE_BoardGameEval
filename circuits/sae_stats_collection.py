@@ -117,7 +117,7 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
         dims=idx[:],
         n_inputs=5000,
         k=TOP_K + 1,
-        batch_size=batch_size,
+        batch_size=25,
         processing_device=torch.device("cpu"),
     )
 
