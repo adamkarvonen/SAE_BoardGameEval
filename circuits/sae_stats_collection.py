@@ -15,13 +15,6 @@ from circuits.chess_interp import examine_dimension_chess
 import circuits.chess_utils as chess_utils
 import circuits.chess_interp as chess_interp
 
-DEVICE = torch.device("cuda")
-MODEL_PATH = "models/lichess_8layers_ckpt_no_optimizer.pt"
-BATCH_SIZE = 8
-TOP_K = 30
-MAX_DIMS = 10000
-N_INPUTS = 5000
-
 
 def get_nested_folders(path: str) -> list[str]:
     """Get a list of folders nested one level deep in the given path."""
@@ -61,11 +54,20 @@ def get_feature(
     return f
 
 
-def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dict, dict]:
+def get_ae_stats(
+    autoencoder_path: str,
+    max_dims: int,
+    n_inputs: int,
+    top_k: int,
+    batch_size: int,
+    device: str,
+    model_path: str = "models/",
+    save_results: bool = False,
+) -> tuple[dict, dict]:
 
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
-    ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=DEVICE)
+    ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
 
     with open(autoencoder_config_path, "r") as f:
         config = json.load(f)
@@ -73,9 +75,11 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
     context_length = config["buffer"]["ctx_len"]
     layer = config["trainer"]["layer"]
 
-    tokenizer = NanogptTokenizer(meta_path="models/meta.pkl")
-    model = convert_nanogpt_model(MODEL_PATH, torch.device(DEVICE))
-    model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer).to(DEVICE)
+    tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
+    model = convert_nanogpt_model(
+        f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
+    )
+    model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
 
     submodule = model.transformer.h[layer].mlp  # layer 1 MLP
     activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
@@ -89,21 +93,21 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
         submodule,
         n_ctxs=512,
         ctx_len=context_length,
-        refresh_batch_size=BATCH_SIZE,
+        refresh_batch_size=batch_size,
         io="out",
         d_submodule=activation_dim,
-        device=DEVICE,
-        out_batch_size=BATCH_SIZE,
+        device=device,
+        out_batch_size=batch_size,
     )
 
-    total_inputs = 8192
-    assert total_inputs % BATCH_SIZE == 0
-    num_iters = total_inputs // BATCH_SIZE
+    total_inputs = 8000
+    assert total_inputs % batch_size == 0
+    num_iters = total_inputs // batch_size
 
-    features = torch.zeros((total_inputs, dictionary_size), device=DEVICE)
+    features = torch.zeros((total_inputs, dictionary_size), device=device)
     for i in range(num_iters):
-        feature = get_feature(buffer, ae, DEVICE)  # (batch_size, dictionary_size)
-        features[i * BATCH_SIZE : (i + 1) * BATCH_SIZE, :] = feature
+        feature = get_feature(buffer, ae, device)  # (batch_size, dictionary_size)
+        features[i * batch_size : (i + 1) * batch_size, :] = feature
 
     firing_rate_per_feature = (features != 0).float().sum(dim=0) / total_inputs
 
@@ -117,15 +121,15 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
         submodule,
         buffer,
         dictionary=ae,
-        dims=idx[:MAX_DIMS],
-        n_inputs=N_INPUTS,
-        k=TOP_K + 1,
+        dims=idx[:max_dims],
+        n_inputs=n_inputs,
+        k=top_k + 1,
         batch_size=25,
         processing_device=torch.device("cpu"),
     )
 
     eval_results = evaluate(
-        ae, buffer, max_len=context_length, batch_size=BATCH_SIZE, io="out", device=DEVICE
+        ae, buffer, max_len=context_length, batch_size=batch_size, io="out", device=device
     )
 
     if save_results:
@@ -135,6 +139,13 @@ def get_ae_stats(autoencoder_path: str, save_results: bool = False) -> tuple[dic
 
 
 def compute_all_ae_stats(folder: str, save_results: bool = False):
+
+    # TODO These should be passed as arguments or read from a config file
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    n_inputs = 5000
+    top_k = 30
+    max_dims = 4000
+    batch_size = 25
 
     syntax_metrics = [
         chess_utils.find_num_indices,
@@ -155,7 +166,16 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
     total_results = {}
     for folder in folders:
         print(f"Starting {folder}")
-        per_dim_stats, eval_results = get_ae_stats(folder, save_results=save_results)
+        per_dim_stats, eval_results = get_ae_stats(
+            folder,
+            max_dims=max_dims,
+            n_inputs=n_inputs,
+            top_k=top_k,
+            batch_size=batch_size,
+            device=device,
+            model_path="models/",
+            save_results=save_results,
+        )
         results = {}
         results["syntax"] = {}
         results["eval_results"] = eval_results
@@ -163,10 +183,10 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         for metric in syntax_metrics:
             metric_name = metric.__name__
             results["syntax"][metric_name] = chess_interp.syntax_analysis(
-                per_dim_stats, TOP_K, TOP_K, MAX_DIMS, metric
+                per_dim_stats, top_k, top_k, max_dims, metric
             )
         results["board"] = chess_interp.board_analysis(
-            per_dim_stats, TOP_K, TOP_K, MAX_DIMS, 0.99, board_metrics
+            per_dim_stats, top_k, top_k, max_dims, 0.99, board_metrics
         )
         total_results[folder] = results
 
@@ -178,9 +198,9 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
 
     total_results = chess_interp.serialize_results(total_results)
     total_results["hyperparameters"] = {}
-    total_results["hyperparameters"]["n_inputs"] = N_INPUTS
-    total_results["hyperparameters"]["top_k"] = TOP_K
-    total_results["hyperparameters"]["max_dims"] = MAX_DIMS
+    total_results["hyperparameters"]["n_inputs"] = n_inputs
+    total_results["hyperparameters"]["top_k"] = top_k
+    total_results["hyperparameters"]["max_dims"] = max_dims
     json.dump(total_results, open(f"total_results.json", "w"))
 
 
