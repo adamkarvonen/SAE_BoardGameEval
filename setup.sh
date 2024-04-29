@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Check if unzip is installed, and exit if it isn't
+if ! command -v unzip &> /dev/null
+then
+    echo "Error: unzip is not installed. Please install it and rerun the setup script."
+    exit 1
+fi
+
 pip install -r requirements.txt
 pip install -e .
 git submodule update --init
