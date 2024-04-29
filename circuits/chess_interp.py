@@ -155,6 +155,7 @@ def syntax_analysis(
     top_k: int,
     max_dims: int,
     syntax_function: callable,
+    notebook_usage: bool = False,
     verbose: bool = False,
 ) -> SyntaxResultsConfig:
 
@@ -162,12 +163,12 @@ def syntax_analysis(
 
     for dim in per_dim_stats:
         results.dim_count += 1
-        if results.dim_count > max_dims:
+        if results.dim_count >= max_dims:
             break
 
         decoded_tokens = per_dim_stats[dim]["decoded_tokens"]
         activations = per_dim_stats[dim]["activations"]
-        # If the dim doesn't have at least 10 firing activations, skip it
+        # If the dim doesn't have at least min_num firing activations, skip it
         if activations[minimum_number_of_activations][-1].item() == 0:
             continue
         results.nonzero_count += 1
@@ -177,9 +178,8 @@ def syntax_analysis(
 
         num_indices = []
         count = 0
+
         for i, pgn in enumerate(inputs[:top_k]):
-            # NOTE: Uncomment this line to view examples of common indices
-            # print(f"dim: {dim} pgn: {pgn}, activation: {activations[i][-1].item()}")
             nums = syntax_function(pgn)
             num_indices.append(nums)
 
@@ -189,7 +189,10 @@ def syntax_analysis(
                 count += 1
 
         if count == top_k:
-            # print(f"All top {top_k} activations in dim: {dim} are on num indices")
+            if notebook_usage:
+                for pgn in inputs[:top_k]:
+                    print(pgn)
+                print(f"All top {top_k} activations in dim: {dim} are on num indices")
             results.syntax_match_idx_count += 1
             average_input_length = sum(len(pgn) for pgn in inputs[:top_k]) / len(inputs[:top_k])
             results.average_input_length += average_input_length
@@ -199,7 +202,7 @@ def syntax_analysis(
 
     if verbose:
         print(
-            f"Out of {len(per_dim_stats)} features, {results.nonzero_count} had at least {minimum_number_of_activations} activations."
+            f"Out of {results.dim_count} features, {results.nonzero_count} had at least {minimum_number_of_activations} activations."
         )
         print(
             f"{results.syntax_match_idx_count} features matched on all top {top_k} inputs for our syntax function {syntax_function.__name__}"
@@ -219,6 +222,7 @@ def board_analysis(
     threshold: float,
     configs: list[Config],
     device: str = "cpu",
+    notebook_usage: bool = False,
     verbose: bool = False,
 ) -> dict[str, BoardResultsConfig]:
 
@@ -239,7 +243,7 @@ def board_analysis(
 
     for dim in tqdm(per_dim_stats, total=len(per_dim_stats), desc="Processing chess pgn strings"):
         dim_count += 1
-        if dim_count > max_dims:
+        if dim_count >= max_dims:
             break
 
         decoded_tokens = per_dim_stats[dim]["decoded_tokens"]
@@ -272,13 +276,18 @@ def board_analysis(
                 average_input_length = sum(len(pgn) for pgn in inputs) / len(inputs)
                 results[config_name].total_average_length += average_input_length
 
+                if notebook_usage:
+                    for pgn in inputs:
+                        print(pgn)
+
             if config.num_rows == 8:
                 for idx in zip(*common_indices):
-                    value = averaged_one_hot[idx].item()
-                    # print(f"Dim: {dim}, Average input length: {int(average_input_length):04}, Value: {value:.2f} at Index: {idx}")
                     results[config_name].board_tracker[idx[0]][idx[1]] += 1
                     results[config_name].per_class_dict[idx[2].item()] += 1
                     results[config_name].average_matches_per_dim += 1
+
+                    if notebook_usage:
+                        print(f"Dim: {dim}, Index: {idx}")
 
     for config in configs:
         config_name = config.custom_board_state_function.__name__
@@ -313,9 +322,7 @@ def board_analysis(
                     print(f"Index: {key}, Count: {count}")
 
                 print(f"\nHere are the most common squares:")
-                board_tracker = torch.tensor(board_tracker).flip(
-                    0
-                )  # torch.tensor has a cleaner printout
-                print(board_tracker)
+                board_tracker = torch.tensor(board_tracker).flip(0)
+                print(board_tracker)  # torch.tensor has a cleaner printout
 
     return results
