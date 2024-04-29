@@ -9,6 +9,14 @@ wget -O lichess_8layers_ckpt_no_optimizer.pt "https://huggingface.co/adamkarvone
 
 cd ..
 
+cd autoencoders
+
+wget -O group0.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group0.zip?download=true"
+unzip group0.zip
+rm group0.zip
+
+cd ..
+
 cd circuits
 cd dictionary_learning
 
