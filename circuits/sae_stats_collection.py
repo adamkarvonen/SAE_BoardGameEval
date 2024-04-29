@@ -104,6 +104,7 @@ def get_ae_stats(
     assert total_inputs % batch_size == 0
     num_iters = total_inputs // batch_size
 
+    # TODO This should be refactored so features is just shape (dictionary_size,) to reduce memory usage
     features = torch.zeros((total_inputs, dictionary_size), device=device)
     for i in range(num_iters):
         feature = get_feature(buffer, ae, device)  # (batch_size, dictionary_size)

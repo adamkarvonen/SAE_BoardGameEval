@@ -65,6 +65,7 @@ def examine_dimension_chess(
 
     dim_count = dims.shape[0]
 
+    # TODO Refactor activations to be shape (dim_count, top_k, max_length) to reduce memory usage
     activations = torch.zeros(
         (dim_count, n_inputs, max_length), device=processing_device, dtype=torch.float32
     )
