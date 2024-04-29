@@ -14,3 +14,4 @@ transformers>=4.39.3
 wandb>=0.16.0
 python-chess==1.999
 pydantic==2.6.4
+jaxtyping==0.2.28
