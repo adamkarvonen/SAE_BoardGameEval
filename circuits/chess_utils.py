@@ -39,6 +39,8 @@ PIECE_TO_ONE_HOT_MAPPING = {
 BLANK_INDEX = PIECE_TO_ONE_HOT_MAPPING[0]
 ONE_HOT_TO_PIECE_MAPPING = {value: key for key, value in PIECE_TO_ONE_HOT_MAPPING.items()}
 
+DEFAULT_DTYPE = torch.int8
+
 
 class PlayerColor(Enum):
     WHITE = "White"
@@ -48,7 +50,7 @@ class PlayerColor(Enum):
 def board_to_skill_state(board: chess.Board, skill: float) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array should tell what skill level the player is."""
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=)
     state[0][0] = skill
 
     return state
@@ -69,7 +71,7 @@ def board_to_eval_state(board: chess.Board, skill: Optional[int] = None) -> torc
     in a lookup table. But, then we couldn't cleanly use this with the existing abstractions.
     To use this function, uncomment the import chess.engine through engine = above, and the internal code below.
     """
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
 
     # info = engine.analyse(board, chess.engine.Limit(time=0.01))
     # score = info["score"].white().score(mate_score=10000)
@@ -90,7 +92,7 @@ def board_to_piece_color_state(board: chess.Board, skill: Optional[int] = None) 
     The 8x8 array should tell if each square is black, white, or blank.
     White is 1, black is -1, and blank is 0.
     In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
     for i in range(64):
         piece = board.piece_at(i)
         if piece:
@@ -107,7 +109,7 @@ def board_to_piece_state(board: chess.Board, skill: Optional[int] = None) -> tor
     In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
 
     # Because state is initialized to all 0s, we only need to change the values of the pieces
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
     for i in range(64):
         piece = board.piece_at(i)
         if piece:
@@ -126,7 +128,7 @@ def board_to_threat_state(board: chess.Board, skill: Optional[int] = None) -> to
 
     ATTACKING_COLOR = chess.BLACK
     # Because state is initialized to all 0s, we only need to change the values of the pieces
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
     for i in range(64):
         if board.is_attacked_by(ATTACKING_COLOR, i):
             state[i // 8, i % 8] = 1
@@ -138,7 +140,7 @@ def board_to_check_state(board: chess.Board, skill: Optional[int] = None) -> tor
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array should tell if the current player is in check.
     1 = In check, 0 = Not in check."""
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     state[0][0] = 1 if board.is_check() else 0
 
     return state
@@ -148,7 +150,7 @@ def board_to_pin_state(board: chess.Board, skill: Optional[int] = None) -> torch
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array indicates if there are any pins on the board (1 = yes, 0 = no)."""
 
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
 
     for color in [chess.WHITE, chess.BLACK]:
         for i in range(64):
@@ -166,7 +168,7 @@ def board_to_prev_state(board: chess.Board, skill: Optional[int] = None) -> torc
     The 8x8 array should tell what piece is on each square at a previous board state."""
 
     PREVIOUS_TURNS = 25
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
     # If we cannot roll back PREVIOUS_TURNS, return a blank state
     # Predicting blank states is trivial, so be careful and change pos_start to not index into the blank states
@@ -198,7 +200,7 @@ def board_to_legal_moves_state(board: chess.Board, skill: Optional[int] = None) 
     """
     MOVING_COLOR = chess.WHITE
     # Initialize the state array with all zeros
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
     # Iterate through all legal moves for White
     for move in board.legal_moves:
@@ -221,7 +223,7 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
     state_stack_one_hot = state_stack_one_hot[:, :, 1:, :, :, :]
     """
 
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
     # If offset is 2, we are predicting the LLM's next move
     # If offset is 1, we are predicting the opponent's response to the LLM's next move
@@ -290,7 +292,7 @@ def create_state_stack(
     count = 1
 
     # Scan 1: Creates states, with length = number of moves in the game
-    initial_states.append(custom_board_to_state_fn(board, skill))
+    initial_states.append(custom_board_to_state_fn(board, skill).to(dtype=DEFAULT_DTYPE))
     # Apply each move to the board
     for move in moves_string.split():
         try:
@@ -301,7 +303,7 @@ def create_state_stack(
             else:
                 board.push_san(move)
 
-            initial_states.append(custom_board_to_state_fn(board, skill))
+            initial_states.append(custom_board_to_state_fn(board, skill).to(dtype=DEFAULT_DTYPE))
         except:
             # because all games are truncated to len 680, often the last move is partial and invalid
             # so we don't need to log this, as it will happen on most games
@@ -385,7 +387,7 @@ def state_stack_to_one_hot(
         num_cols,
         range_size,
         device=device,
-        dtype=torch.int,
+        dtype=DEFAULT_DTYPE,
     )
 
     for val in mapping:
@@ -606,7 +608,7 @@ def find_custom_indices(
         len(lst) == shortest_length for lst in indices_series
     ), "Not all lists have the same length"
 
-    indices = torch.tensor(indices_series.apply(list).tolist(), dtype=torch.int)
+    indices = torch.tensor(indices_series.apply(list).tolist(), dtype=torch.int32)
     return indices
 
 
