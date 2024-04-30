@@ -5,6 +5,7 @@ from torch.nn import functional as F
 from typing import Callable, Optional
 from dataclasses import dataclass
 from jaxtyping import Int, Float, jaxtyped
+from beartype import beartype
 from torch import Tensor
 from enum import Enum
 import re
@@ -699,7 +700,7 @@ def chess_boards_to_state_stack(
     device: torch.device,
     config: Config,
     skill: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
+) -> Int[Tensor, "batch_size num_rows num_cols num_options"]:
     one_hot_list = []
 
     for board in chess_boards:
@@ -714,11 +715,11 @@ def chess_boards_to_state_stack(
 
 
 def mask_initial_board_states(
-    one_hot_list: torch.Tensor,
+    one_hot_list: Int[Tensor, "batch_size num_rows num_cols num_options"],
     device: torch.device,
     config: Config,
     skill: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
+) -> Int[Tensor, "batch_size num_rows num_cols num_options"]:
     """Mask off all board states that are shared with the initial board state.
     Otherwise the initial board state will dominate the common states."""
     initial_board = chess.Board()
@@ -733,7 +734,9 @@ def mask_initial_board_states(
     return one_hot_list
 
 
-def get_averaged_states(one_hot_stack: torch.Tensor) -> torch.Tensor:
+def get_averaged_states(
+    one_hot_stack: Int[Tensor, "batch_size num_rows num_cols num_options"]
+) -> Int[Tensor, "num_rows num_cols num_options"]:
     summed_one_hot = torch.sum(one_hot_stack, dim=0)
     averaged_one_hot = summed_one_hot / one_hot_stack.shape[0]
     averaged_one_hot = averaged_one_hot.squeeze()
@@ -741,7 +744,7 @@ def get_averaged_states(one_hot_stack: torch.Tensor) -> torch.Tensor:
 
 
 def find_common_states(
-    averaged_one_hot: torch.Tensor, threshold: float
+    averaged_one_hot: Int[Tensor, "num_rows num_cols num_options"], threshold: float
 ) -> tuple[torch.Tensor, ...]:
     greater_than_threshold = averaged_one_hot >= threshold
     indices = torch.nonzero(greater_than_threshold, as_tuple=True)
