@@ -50,7 +50,7 @@ class PlayerColor(Enum):
 def board_to_skill_state(board: chess.Board, skill: float) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array should tell what skill level the player is."""
-    state = torch.zeros((1, 1), dtype=)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     state[0][0] = skill
 
     return state
