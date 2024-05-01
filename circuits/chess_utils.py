@@ -696,6 +696,20 @@ pin_config = Config(
     num_cols=1,
 )
 
+all_configs = [
+    piece_config,
+    color_config,
+    threat_config,
+    legal_move_config,
+    prev_move_config,
+    eval_config,
+    skill_config,
+    check_config,
+    pin_config,
+]
+
+config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}
+
 
 def chess_boards_to_state_stack(
     chess_boards: list[chess.Board],
