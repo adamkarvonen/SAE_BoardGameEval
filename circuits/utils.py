@@ -9,14 +9,9 @@ from jaxtyping import Int, Float, jaxtyped
 from torch import Tensor
 
 from circuits.dictionary_learning import ActivationBuffer
-from circuits.dictionary_learning.utils import hf_dataset_to_generator
 from circuits.dictionary_learning import AutoEncoder
-from circuits.dictionary_learning.evaluation import evaluate
 
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
-from circuits.chess_interp import examine_dimension_chess
-import circuits.chess_utils as chess_utils
-import circuits.chess_interp as chess_interp
 
 
 @dataclass
