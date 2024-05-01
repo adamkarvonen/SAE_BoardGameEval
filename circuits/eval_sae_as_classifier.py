@@ -27,6 +27,9 @@ def construct_eval_dataset(
         ).to(device)
         # state stack shape: "modes sample_size pgn_str_length rows cols"
 
+        assert state_stack.shape[1] == len(pgn_strings)
+        assert state_stack.shape[2] == max_str_length
+
         data[func_name] = chess_utils.state_stack_to_one_hot(
             1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
         )
