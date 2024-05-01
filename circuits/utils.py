@@ -3,6 +3,10 @@ import torch
 from nnsight import LanguageModel
 import json
 from typing import Any
+from datasets import load_dataset
+from einops import rearrange
+from jaxtyping import Int, Float, jaxtyped
+from torch import Tensor
 
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning.utils import hf_dataset_to_generator
@@ -77,6 +81,20 @@ def get_ae_bundle(
     )
 
 
+def get_first_n_dataset_rows(dataset_name: str, n: int, split="train", streaming=True):
+    dataset = load_dataset(dataset_name, split=split, streaming=streaming)
+
+    def gen():
+        count = 0
+        for x in iter(dataset):
+            if count >= n:
+                break
+            yield x["text"]
+            count += 1
+
+    return gen()
+
+
 @torch.no_grad()
 def get_feature(
     activations,
@@ -93,3 +111,30 @@ def get_feature(
     x_hat, f = ae(x, output_features=True)
 
     return f
+
+
+# TODO: This should take a list of dictionaries as input
+def collect_activations_batch(
+    model: LanguageModel,
+    submodule,
+    max_length: int,
+    inputs: list[str],
+    dictionary: AutoEncoder,
+    dims: Int[Tensor, "num_dims"],
+) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
+    with model.trace(inputs, invoker_args=dict(max_length=max_length, truncation=True)):
+        cur_tokens = model.input[1][
+            "input_ids"
+        ].save()  # if you're getting errors, check here; might only work for pythia models
+        cur_activations = submodule.output
+        if type(cur_activations.shape) == tuple:
+            cur_activations = cur_activations[0]
+        cur_activations = dictionary.encode(cur_activations)
+        cur_activations = cur_activations[
+            :, :, dims
+        ].save()  # Shape: (batch_size, max_length, dim_count)
+    cur_activations = rearrange(
+        cur_activations.value, "b n d -> d b n"
+    )  # Shape: (dim_count, batch_size, max_length)
+
+    return cur_activations, cur_tokens.value

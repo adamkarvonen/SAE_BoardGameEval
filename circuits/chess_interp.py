@@ -4,9 +4,12 @@ import torch
 from tqdm import tqdm
 from pydantic import BaseModel
 from typing import Optional
+from nnsight import LanguageModel
 
+from circuits.dictionary_learning import AutoEncoder, ActivationBuffer
 import circuits.chess_utils as chess_utils
 from circuits.chess_utils import Config
+from circuits.utils import collect_activations_batch
 
 
 class BoardResultsConfig(BaseModel):
@@ -59,15 +62,15 @@ def get_num_classes(config: Config) -> int:
 
 @torch.no_grad()
 def examine_dimension_chess(
-    model,
+    model: LanguageModel,
     submodule,
-    buffer,
-    dictionary=None,
-    max_length=128,
-    n_inputs=512,
-    dims=torch.tensor([0]),
-    k=30,
-    batch_size=4,
+    buffer: ActivationBuffer,
+    dictionary: AutoEncoder,
+    max_length: int,
+    n_inputs: int,
+    dims: torch.Tensor,
+    k: int = 30,
+    batch_size: int = 4,
     processing_device=torch.device("cpu"),
 ):
     """I have made the following modifications:
@@ -87,6 +90,7 @@ def examine_dimension_chess(
     dim_count = dims.shape[0]
 
     # TODO Refactor activations to be shape (dim_count, top_k, max_length) to reduce memory usage
+    # Processing time slows down when using float16, using float32 for now
     activations = torch.zeros(
         (dim_count, n_inputs, max_length), device=processing_device, dtype=torch.float32
     )
@@ -94,26 +98,13 @@ def examine_dimension_chess(
 
     for i in tqdm(range(n_iters), total=n_iters, desc="Collecting activations"):
         inputs = buffer.text_batch(batch_size=batch_size)
-        with model.trace(inputs, invoker_args=dict(max_length=max_length, truncation=True)):
-            cur_tokens = model.input[1][
-                "input_ids"
-            ].save()  # if you're getting errors, check here; might only work for pythia models
-            cur_activations = submodule.output
-            if type(cur_activations.shape) == tuple:
-                cur_activations = cur_activations[0]
-            if dictionary is not None:
-                cur_activations = dictionary.encode(cur_activations)
-            cur_activations = cur_activations[
-                :, :, dims
-            ].save()  # Shape: (batch_size, max_length, dim_count)
-        cur_activations = rearrange(
-            cur_activations.value, "b n d -> d b n"
-        )  # Shape: (dim_count, batch_size, max_length)
-        activations[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
-        tokens[i * batch_size : (i + 1) * batch_size, :] = cur_tokens.value
 
-    activations = activations.to("cpu")
-    tokens = tokens.to("cpu")
+        cur_activations, cur_tokens = collect_activations_batch(
+            model, submodule, max_length, inputs, dictionary, dims
+        )
+
+        activations[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
+        tokens[i * batch_size : (i + 1) * batch_size, :] = cur_tokens
     decoded_tokens = [model.tokenizer.decode(tokens[i]) for i in range(tokens.shape[0])]
 
     per_dim_stats = {}
