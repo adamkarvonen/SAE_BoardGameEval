@@ -5,8 +5,8 @@ from tqdm import tqdm
 from pydantic import BaseModel
 from typing import Optional
 
-import chess_utils
-from chess_utils import Config
+import circuits.chess_utils as chess_utils
+from circuits.chess_utils import Config
 
 
 class BoardResultsConfig(BaseModel):

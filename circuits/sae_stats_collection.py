@@ -97,14 +97,16 @@ def get_ae_stats(
     return per_dim_stats, eval_results
 
 
-def compute_all_ae_stats(folder: str, save_results: bool = False):
+def compute_all_ae_stats(
+    folder: str,
+    n_inputs: int = 5000,
+    top_k: int = 30,
+    max_dims: int = 4000,
+    batch_size: int = 25,
+    save_results: bool = False,
+):
 
-    # TODO These should be passed as arguments or read from a config file
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    n_inputs = 5000
-    top_k = 30
-    max_dims = 4000
-    batch_size = 25
 
     syntax_metrics = [
         chess_utils.find_num_indices,
