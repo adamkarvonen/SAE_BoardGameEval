@@ -220,7 +220,7 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
     The purpose of this is to see if the linear probe can determine the next move of the GPT.
     To get next move instead of last move, we offset the state stack by 1 in linear_probe_forward_pass():
     resid_post = resid_post[:, :-1, :]
-    state_stack_one_hot = state_stack_one_hot[:, :, 1:, :, :, :]
+    state_stack_one_hot = state_stack_one_hot[:, 1:, :, :, :]
     """
 
     state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
@@ -332,7 +332,7 @@ def create_state_stacks(
     moves_strings: list[str],
     custom_board_to_state_fn: Callable[[chess.Board], torch.Tensor],
     skill_array: Optional[torch.Tensor] = None,
-) -> Float[Tensor, "modes sample_size pgn_str_length rows cols"]:
+) -> Float[Tensor, "sample_size pgn_str_length rows cols"]:
     """Given a list of strings of PGN format moves, create a tensor of shape (len(moves_strings), 8, 8).
     custom_board_to_state is a function that takes a chess.Board object and returns a 8x8 torch.Tensor for
     board state, or 1x1 for centipawn advantage."""
@@ -348,13 +348,10 @@ def create_state_stacks(
 
     # Convert the list of tensors to a single tensor
     final_state_stack = torch.stack(state_stacks)
-    final_state_stack = final_state_stack.unsqueeze(0)  # Add a dimension for the modes
-    # Currently, there is just one mode and it isn't necessary. For now, I'm maintaining the dimension for future use.
     return final_state_stack
 
 
 def state_stack_to_one_hot(
-    num_modes: int,
     num_rows: int,
     num_cols: int,
     min_val: int,
@@ -362,9 +359,9 @@ def state_stack_to_one_hot(
     device: torch.device,
     state_stack: torch.Tensor,
     user_mapping: Optional[dict[int, int]] = None,
-) -> Int[Tensor, "modes sample_size num_white_moves rows cols one_hot_range"]:
-    """Input shape: assert(state_stacks_all_chars.shape) == (modes, sample_size, game_length, rows, cols)
-    Output shape: assert(state_stacks_one_hot.shape) == (modes, sample_size, game_length, rows, cols, one_hot_range)
+) -> Int[Tensor, "sample_size num_white_moves rows cols one_hot_range"]:
+    """Input shape: assert(state_stacks_all_chars.shape) == (sample_size, game_length, rows, cols)
+    Output shape: assert(state_stacks_one_hot.shape) == (sample_size, game_length, rows, cols, one_hot_range)
     """
     range_size = max_val - min_val + 1
 
@@ -380,9 +377,8 @@ def state_stack_to_one_hot(
 
     # Initialize the one-hot tensor
     one_hot = torch.zeros(
-        state_stack.shape[0],  # num modes
-        state_stack.shape[1],  # num games
-        state_stack.shape[2],  # num moves
+        state_stack.shape[0],  # num games
+        state_stack.shape[1],  # num moves
         num_rows,
         num_cols,
         range_size,
@@ -397,8 +393,8 @@ def state_stack_to_one_hot(
 
 
 def one_hot_to_state_stack(one_hot: torch.Tensor, min_val: int) -> torch.Tensor:
-    """Input shape: assert(probe_out.shape) == (modes, sample_size, num_white_moves, rows, cols, one_hot_range)
-    Output shape: assert(state_stacks_probe_outputs.shape) == (modes, sample_size, num_white_moves, rows, cols)
+    """Input shape: assert(probe_out.shape) == (sample_size, num_white_moves, rows, cols, one_hot_range)
+    Output shape: assert(state_stacks_probe_outputs.shape) == (sample_size, num_white_moves, rows, cols)
     """
     indices = torch.argmax(one_hot, dim=-1)
     state_stack = indices + min_val
@@ -721,9 +717,9 @@ def chess_boards_to_state_stack(
 
     for board in chess_boards:
         state_stack = config.custom_board_state_function(board, skill)
-        state_stack = state_stack.view(1, 1, 1, config.num_rows, config.num_cols)
+        state_stack = state_stack.view(1, 1, config.num_rows, config.num_cols)
         one_hot = state_stack_to_one_hot(
-            1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
+            config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
         )
         one_hot_list.append(one_hot)
     stacked_one_hot = torch.stack(one_hot_list, dim=0)
@@ -740,9 +736,9 @@ def mask_initial_board_states(
     Otherwise the initial board state will dominate the common states."""
     initial_board = chess.Board()
     initial_state = config.custom_board_state_function(initial_board, skill)
-    initial_state = initial_state.view(1, 1, 1, config.num_rows, config.num_cols)
+    initial_state = initial_state.view(1, 1, config.num_rows, config.num_cols)
     initial_one_hot = state_stack_to_one_hot(
-        1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, initial_state
+        config.num_rows, config.num_cols, config.min_val, config.max_val, device, initial_state
     )
 
     mask = (initial_one_hot == 1) & (one_hot_list == 1)
