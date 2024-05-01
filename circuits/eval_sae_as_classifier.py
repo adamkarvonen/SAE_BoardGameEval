@@ -25,9 +25,13 @@ def construct_eval_dataset(
         state_stack = chess_utils.create_state_stacks(
             pgn_strings, config.custom_board_state_function
         ).to(device)
+        # state stack shape: "modes sample_size pgn_str_length rows cols"
+
         data[func_name] = chess_utils.state_stack_to_one_hot(
             1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
         )
+
+        # data[func_name] shape "modes sample_size pgn_str_length rows cols num_options"
 
     with open("data.pkl", "wb") as f:
         pickle.dump(data, f)
