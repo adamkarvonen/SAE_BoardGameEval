@@ -181,20 +181,26 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         results["syntax"] = {}
         results["eval_results"] = eval_results
 
+        feature_dict = chess_interp.initialize_feature_dictionary(per_dim_stats)
+
         for metric in syntax_metrics:
             metric_name = metric.__name__
-            results["syntax"][metric_name] = chess_interp.syntax_analysis(
-                per_dim_stats, top_k, top_k, max_dims, metric
+            results["syntax"][metric_name], feature_dict = chess_interp.syntax_analysis(
+                per_dim_stats, top_k, top_k, max_dims, metric, feature_dict
             )
-        results["board"] = chess_interp.board_analysis(
-            per_dim_stats, top_k, top_k, max_dims, 0.99, board_metrics
+        results["board"], feature_dict = chess_interp.board_analysis(
+            per_dim_stats, top_k, top_k, max_dims, 0.99, board_metrics, feature_dict
         )
         total_results[folder] = results
+
+        with open(f"{folder}feature_dict.pkl", "wb") as f:
+            pickle.dump(feature_dict, f)
 
         print(f"Finished {folder}")
 
         del per_dim_stats
         del eval_results
+        del feature_dict
         gc.collect()
 
     total_results = chess_interp.serialize_results(total_results)

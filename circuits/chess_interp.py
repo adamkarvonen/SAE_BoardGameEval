@@ -2,10 +2,11 @@ from circuitsvis.activations import text_neuron_activations
 from einops import rearrange
 import torch
 from tqdm import tqdm
+from pydantic import BaseModel
+from typing import Optional
+
 import chess_utils
 from chess_utils import Config
-
-from pydantic import BaseModel
 
 
 class BoardResultsConfig(BaseModel):
@@ -34,6 +35,26 @@ def serialize_results(data):
         return [serialize_results(item) for item in data]
     else:
         return data
+
+
+def initialize_feature_dictionary(per_dim_stats: dict) -> dict[int, list]:
+    feature_dict: dict[int, list[str]] = {}
+    for dim in per_dim_stats:
+        feature_dict[dim] = []
+    return feature_dict
+
+
+def merge_feature_dictionaries(
+    feature_dict: dict[int, list[dict]],
+    new_feature_dict: dict[int, list[dict]],
+) -> dict[int, list[dict]]:
+    for dim in new_feature_dict:
+        feature_dict[dim].extend(new_feature_dict[dim])
+    return feature_dict
+
+
+def get_num_classes(config: Config) -> int:
+    return abs(config.min_val) + abs(config.max_val) + 1
 
 
 @torch.no_grad()
@@ -155,9 +176,13 @@ def syntax_analysis(
     top_k: int,
     max_dims: int,
     syntax_function: callable,
+    feature_dict: Optional[dict[int, list[dict]]] = None,
     notebook_usage: bool = False,
     verbose: bool = False,
-) -> SyntaxResultsConfig:
+) -> tuple[SyntaxResultsConfig, dict[int, list[dict]]]:
+
+    if feature_dict is None:
+        feature_dict = initialize_feature_dictionary(per_dim_stats)
 
     results = SyntaxResultsConfig()
 
@@ -196,6 +221,7 @@ def syntax_analysis(
             results.syntax_match_idx_count += 1
             average_input_length = sum(len(pgn) for pgn in inputs[:top_k]) / len(inputs[:top_k])
             results.average_input_length += average_input_length
+            feature_dict[dim].append({"name": syntax_function.__name__})
 
     if results.syntax_match_idx_count > 0:
         results.average_input_length /= results.syntax_match_idx_count
@@ -211,7 +237,7 @@ def syntax_analysis(
             f"The average length of inputs of pattern matching features was {results.average_input_length:.2f}"
         )
 
-    return results
+    return results, feature_dict
 
 
 def board_analysis(
@@ -221,10 +247,14 @@ def board_analysis(
     max_dims: int,
     threshold: float,
     configs: list[Config],
+    feature_dict: Optional[dict[int, list[dict]]] = None,
     device: str = "cpu",
     notebook_usage: bool = False,
     verbose: bool = False,
-) -> dict[str, BoardResultsConfig]:
+) -> tuple[dict[str, BoardResultsConfig], dict[int, list[dict]]]:
+
+    if feature_dict is None:
+        feature_dict = initialize_feature_dictionary(per_dim_stats)
 
     nonzero_count = 0
     dim_count = 0
@@ -233,8 +263,7 @@ def board_analysis(
 
     for config in configs:
         board_tracker = torch.zeros(config.num_rows, config.num_cols).tolist()
-        num_classes = abs(config.min_val) + abs(config.max_val) + 1
-        per_class_dict = {key: 0 for key in range(0, num_classes)}
+        per_class_dict = {key: 0 for key in range(0, get_num_classes(config))}
 
         results[config.custom_board_state_function.__name__] = BoardResultsConfig(
             per_class_dict=per_class_dict,
@@ -277,18 +306,30 @@ def board_analysis(
                 average_input_length = sum(len(pgn) for pgn in inputs) / len(inputs)
                 results[config_name].total_average_length += average_input_length
 
+                feature_info = {"name": config.custom_board_state_function.__name__}
+
                 if notebook_usage:
                     for pgn in inputs:
                         print(pgn)
 
-            if config.num_rows == 8:
-                for idx in zip(*common_indices):
-                    results[config_name].board_tracker[idx[0]][idx[1]] += 1
-                    results[config_name].per_class_dict[idx[2].item()] += 1
-                    results[config_name].average_matches_per_dim += 1
+                if config.num_rows == 8:
 
-                    if notebook_usage:
-                        print(f"Dim: {dim}, Index: {idx}")
+                    common_board_state = torch.zeros(
+                        8, 8, get_num_classes(config), device=device, dtype=torch.int8
+                    )
+                    for idx in zip(*common_indices):
+                        results[config_name].board_tracker[idx[0]][idx[1]] += 1
+                        results[config_name].per_class_dict[idx[2].item()] += 1
+                        results[config_name].average_matches_per_dim += 1
+
+                        common_board_state[idx[0], idx[1], idx[2]] = 1
+
+                        if notebook_usage:
+                            print(f"Dim: {dim}, Index: {idx}")
+
+                    feature_info["board_state"] = common_board_state
+
+                feature_dict[dim].append(feature_info)
 
     for config in configs:
         config_name = config.custom_board_state_function.__name__
@@ -326,4 +367,4 @@ def board_analysis(
                 board_tracker = torch.tensor(board_tracker).flip(0)
                 print(board_tracker)  # torch.tensor has a cleaner printout
 
-    return results
+    return results, feature_dict
