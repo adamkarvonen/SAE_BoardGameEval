@@ -221,7 +221,11 @@ def syntax_analysis(
             results.syntax_match_idx_count += 1
             average_input_length = sum(len(pgn) for pgn in inputs[:top_k]) / len(inputs[:top_k])
             results.average_input_length += average_input_length
-            feature_dict[dim].append({"name": syntax_function.__name__})
+            feature_info = {
+                "name": syntax_function.__name__,
+                "max_activation": activations[0][-1].item(),
+            }
+            feature_dict[dim].append(feature_info)
 
     if results.syntax_match_idx_count > 0:
         results.average_input_length /= results.syntax_match_idx_count
@@ -306,7 +310,10 @@ def board_analysis(
                 average_input_length = sum(len(pgn) for pgn in inputs) / len(inputs)
                 results[config_name].total_average_length += average_input_length
 
-                feature_info = {"name": config.custom_board_state_function.__name__}
+                feature_info = {
+                    "name": config.custom_board_state_function.__name__,
+                    "max_activation": activations[0][-1].item(),
+                }
 
                 if notebook_usage:
                     for pgn in inputs:
