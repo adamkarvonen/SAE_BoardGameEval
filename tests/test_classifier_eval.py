@@ -10,24 +10,27 @@ DEVICE = torch.device("cuda")
 def test_initialize_results_dict():
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
     num_thresholds = 2
-    num_features = 4
+    alive_features_F = torch.arange(4).to(DEVICE)
 
     results = eval_sae_as_classifier.initialize_results_dict(
-        custom_functions, num_thresholds, num_features, DEVICE
+        custom_functions, num_thresholds, alive_features_F, DEVICE
     )
 
-    assert len(results) == len(custom_functions) + 2  # 2 for on_count and off_count
+    assert (
+        len(results) == len(custom_functions) + 3
+    )  # 3 for on_count, off_count, and alive_features
 
 
 def test_aggregate_batch_statistics():
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
     num_features = 4
+    alive_features_F = torch.arange(num_features).to(DEVICE)
     thresholds_T111 = (
         torch.arange(0.0, 1.0, 0.5).view(-1, 1, 1, 1).to(DEVICE)
     )  # Reshape for broadcasting
 
     results = eval_sae_as_classifier.initialize_results_dict(
-        custom_functions, len(thresholds_T111), num_features, DEVICE
+        custom_functions, len(thresholds_T111), alive_features_F, DEVICE
     )
 
     batch_size = 3
@@ -46,7 +49,7 @@ def test_aggregate_batch_statistics():
     )
 
     all_activations_FBL = torch.zeros(num_features, batch_size, game_len).to(DEVICE)
-    all_activations_FBL[0, :, 0:5] = 0.6  # Feature 0 activates on pins
+    all_activations_FBL[0, :, 0:5] = 0.6  # Feature 0 activates on pins and initial state
     all_activations_FBL[1, :, 5:8] = 0.6  # Feature 1 activates on the first move
 
     start = 0
@@ -110,3 +113,8 @@ def test_aggregate_batch_statistics():
         results["board_to_pin_state"]["on_normalized"][0, 0, :, :, :].squeeze(),
         torch.tensor(1.0).to(DEVICE),
     )
+    assert torch.equal(
+        results["board_to_pin_state"]["off_normalized"][0, 0, :, :, :].squeeze(),
+        torch.tensor(0.0).to(DEVICE),
+    )
+    assert results["board_to_pin_state"]["off_normalized"][0, 2, :, :, :].squeeze().item() < 0.5

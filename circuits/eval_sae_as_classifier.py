@@ -5,7 +5,12 @@ import einops
 from datasets import load_dataset
 from typing import Callable
 
-from circuits.utils import get_ae_bundle, collect_activations_batch, get_nested_folders
+from circuits.utils import (
+    get_ae_bundle,
+    collect_activations_batch,
+    get_nested_folders,
+    get_firing_features,
+)
 import circuits.chess_utils as chess_utils
 
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
@@ -72,16 +77,22 @@ def construct_eval_dataset(
 
 
 def initialize_results_dict(
-    custom_functions: list[Callable], num_thresholds: int, num_features: int, device: torch.device
+    custom_functions: list[Callable],
+    num_thresholds: int,
+    alive_features_F: torch.Tensor,
+    device: torch.device,
 ) -> dict:
     """For every function for every threshold for every feature, we keep track of the counts for every element
     in the state stack, along with the activations counts. This is done in parallel to make it fast.
     """
     results = {}
 
+    num_features = len(alive_features_F)
+
     on_counter_TF = torch.zeros(num_thresholds, num_features).to(device)
     results["on_count"] = on_counter_TF
     results["off_count"] = on_counter_TF.clone()
+    results["alive_features"] = alive_features_F
 
     for custom_function in custom_functions:
         results[custom_function.__name__] = {}
@@ -231,13 +242,20 @@ def aggregate_statistics(
     pgn_strings = data["pgn_strings"]
     del data["pgn_strings"]
 
-    firing_rate_data = iter(data["pgn_strings"])
+    firing_rate_data = iter(pgn_strings)
+    n_ctxs = min(512, n_inputs)
 
-    ae_bundle = get_ae_bundle(autoencoder_path, device, firing_rate_data, batch_size, model_path)
+    ae_bundle = get_ae_bundle(
+        autoencoder_path, device, firing_rate_data, batch_size, model_path, n_ctxs
+    )
+
+    firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
+    alive_features_F = get_firing_features(ae_bundle, firing_rate_n_inputs, batch_size, device)
     ae_bundle.buffer = None
-
-    features = torch.arange(0, ae_bundle.dictionary_size, device=device)
-    num_features = len(features)
+    num_features = len(alive_features_F)
+    print(
+        f"Out of {ae_bundle.dictionary_size} features, on {firing_rate_n_inputs} activations, {num_features} are alive."
+    )
 
     assert len(pgn_strings) >= n_inputs
     assert n_inputs % batch_size == 0
@@ -249,7 +267,9 @@ def aggregate_statistics(
         torch.arange(0.0, 1.0, 0.1).view(-1, 1, 1, 1).to(device)
     )  # Reshape for broadcasting
 
-    results = initialize_results_dict(custom_functions, len(thresholds_T111), num_features, device)
+    results = initialize_results_dict(
+        custom_functions, len(thresholds_T111), alive_features_F, device
+    )
 
     for i in tqdm(range(n_iters)):
         start = i * batch_size
@@ -259,7 +279,7 @@ def aggregate_statistics(
         batch_data = get_data_batch(data, inputs_BL, start, end, custom_functions, device)
 
         all_activations_FBL, encoded_inputs = collect_activations_batch(
-            ae_bundle, inputs_BL, features
+            ae_bundle, inputs_BL, alive_features_F
         )
 
         # For thousands of features, this would be many GB of memory. So, we minibatch.
@@ -300,7 +320,7 @@ if __name__ == "__main__":
 
     batch_size = 10
     feature_batch_size = 10
-    n_inputs = 100
+    n_inputs = 10
     device = "cuda"
     # device = "cpu"
     model_path = "models/"

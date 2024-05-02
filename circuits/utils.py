@@ -32,6 +32,7 @@ def get_ae_bundle(
     data: Any,
     batch_size: int,
     model_path: str = "models/",
+    n_ctxs: int = 512,
 ) -> AutoEncoderBundle:
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
@@ -57,7 +58,7 @@ def get_ae_bundle(
         data,
         model,
         submodule,
-        n_ctxs=512,
+        n_ctxs=n_ctxs,
         ctx_len=context_length,
         refresh_batch_size=batch_size,
         io="out",
@@ -109,7 +110,7 @@ def get_feature(
     return f
 
 
-def get_firing_feature(
+def get_firing_features(
     ae_bundle: AutoEncoderBundle,
     total_inputs: int,
     batch_size: int,
@@ -120,7 +121,7 @@ def get_firing_feature(
     total_inputs == n_inputs * context_length.
     For sparse autoencoders with larger expansion factors (16+), over 75% of the features can be dead.
     """
-    assert total_inputs % batch_size == 0
+
     num_iters = total_inputs // batch_size
 
     features_F = torch.zeros((ae_bundle.dictionary_size,), device=device)
