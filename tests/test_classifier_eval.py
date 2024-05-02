@@ -21,8 +21,6 @@ def test_initialize_results_dict():
 
 def test_aggregate_batch_statistics():
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
-    # custom_functions = [chess_utils.board_to_pin_state]
-    custom_functions = [chess_utils.board_to_piece_state]
     num_features = 4
     thresholds_T111 = (
         torch.arange(0.0, 1.0, 0.5).view(-1, 1, 1, 1).to(DEVICE)
@@ -44,7 +42,7 @@ def test_aggregate_batch_statistics():
     data["board_to_pin_state"][:, 0:5, :, :, 1] = 1  # All games have a pin before the first move
 
     batch_data = eval_sae_as_classifier.get_data_batch(
-        data, inputs_BL, 0, batch_size - 1, custom_functions, DEVICE
+        data, inputs_BL, 0, batch_size, custom_functions, DEVICE
     )
 
     all_activations_FBL = torch.zeros(num_features, batch_size, game_len).to(DEVICE)
@@ -91,6 +89,13 @@ def test_aggregate_batch_statistics():
         config, DEVICE, first_move_state
     ).squeeze()
 
+    assert torch.equal(
+        results["board_to_piece_state"]["on"][0, 0, :, :, :], initial_one_hot * dim_0_on_count
+    )
+    assert torch.equal(
+        results["board_to_piece_state"]["on"][0, 1, :, :, :], first_move_one_hot * dim_1_on_count
+    )
+
     results = eval_sae_as_classifier.normalize_tracker(results, "on", custom_functions, DEVICE)
     results = eval_sae_as_classifier.normalize_tracker(results, "off", custom_functions, DEVICE)
 
@@ -99,4 +104,9 @@ def test_aggregate_batch_statistics():
     )
     assert torch.equal(
         results["board_to_piece_state"]["on_normalized"][0, 1, :, :, :], first_move_one_hot
+    )
+
+    assert torch.equal(
+        results["board_to_pin_state"]["on_normalized"][0, 0, :, :, :].squeeze(),
+        torch.tensor([0.0, 1.0]).to(DEVICE),
     )
