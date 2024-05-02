@@ -141,6 +141,8 @@ def get_firing_features(
 
 
 # TODO: This should take a list of dictionaries as input. Maybe in ae_bundle?
+# On second thought, activation collection ends up being a relatively cheap operation
+# compared to board state aggregation. I'll leave it as is for now.
 @torch.no_grad()
 def collect_activations_batch(
     ae_bundle: AutoEncoderBundle,
