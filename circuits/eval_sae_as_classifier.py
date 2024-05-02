@@ -2,6 +2,7 @@ from tqdm import tqdm
 import pickle
 import torch
 import einops
+from datasets import load_dataset
 
 from circuits.utils import (
     get_ae_bundle,
@@ -16,6 +17,53 @@ import circuits.chess_utils as chess_utils
 # T = thresholds
 # R = rows (or cols)
 # C = classes for one hot encoding
+
+
+def print_tensor_memory_usage(tensor):
+    element_size = tensor.element_size()  # size in bytes for one tensor element
+    num_elements = tensor.numel()  # number of elements in the tensor
+    total_memory = element_size * num_elements  # total memory in bytes
+    total_memory /= 1024**2  # total memory in MiB
+    print(f"Element size: {element_size} bytes")
+    print(f"Number of elements: {num_elements}")
+    print(f"Memory usage: {total_memory} bytes")
+
+
+def construct_eval_dataset(
+    configs: list[chess_utils.Config], n_inputs: int, max_str_length: int = 256, device: str = "cpu"
+):
+    dataset = load_dataset("adamkarvonen/chess_sae_individual_games_filtered", streaming=False)
+    pgn_strings = []
+    for i, example in enumerate(dataset["train"]):
+        if i >= n_inputs:
+            break
+        pgn_strings.append(example["text"][:max_str_length])
+
+    data = {}
+    data["pgn_strings"] = pgn_strings
+
+    for config in configs:
+        if config.num_rows == 8:
+            continue
+        func_name = config.custom_board_state_function.__name__
+        state_stack_BLRR = chess_utils.create_state_stacks(
+            pgn_strings, config.custom_board_state_function
+        ).to(device)
+
+        assert state_stack_BLRR.shape[0] == len(pgn_strings)
+        assert state_stack_BLRR.shape[1] == max_str_length
+
+        one_hot_BLRRC = chess_utils.state_stack_to_one_hot(config, device, state_stack_BLRR)
+
+        print(func_name)
+        print_tensor_memory_usage(one_hot_BLRRC)
+
+        data[func_name] = one_hot_BLRRC
+
+    with open("data.pkl", "wb") as f:
+        pickle.dump(data, f)
+
+    return data
 
 
 def initialize_results_dict(
