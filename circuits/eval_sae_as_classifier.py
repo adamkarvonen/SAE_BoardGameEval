@@ -4,10 +4,7 @@ import torch
 import einops
 from datasets import load_dataset
 
-from circuits.utils import (
-    get_ae_bundle,
-    collect_activations_batch,
-)
+from circuits.utils import get_ae_bundle, collect_activations_batch, get_nested_folders
 import circuits.chess_utils as chess_utils
 
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
@@ -184,6 +181,29 @@ def aggregate_batch_statistics(
     return results
 
 
+def normalize_tracker(
+    results: dict, tracker_type: str, custom_functions: list[callable], device: torch.device
+):
+    """Normalize the specified tracker (on or off) values by its count using element-wise multiplication."""
+    for custom_function in custom_functions:
+        counts_TF = results[f"{tracker_type}_count"]
+
+        # Calculate inverse of counts safely
+        inverse_counts_TF = torch.zeros_like(counts_TF).to(device)
+        non_zero_mask = counts_TF > 0
+        inverse_counts_TF[non_zero_mask] = 1 / counts_TF[non_zero_mask]
+
+        tracker_TFRRC = results[custom_function.__name__][tracker_type]
+
+        # Normalize using element-wise multiplication
+        normalized_tracker_TFRRC = tracker_TFRRC * inverse_counts_TF[:, :, None, None, None]
+
+        # Store the normalized results
+        results[custom_function.__name__][f"{tracker_type}_normalized"] = normalized_tracker_TFRRC
+
+    return results
+
+
 def aggregate_statistics(
     custom_functions: list[callable],
     autoencoder_path: str,
@@ -263,37 +283,18 @@ def aggregate_statistics(
                 device,
             )
 
-    with open("results.pkl", "wb") as f:
+    autoencoder_results_name = autoencoder_path.replace("/", "_") + "_results.pkl"
+    with open(autoencoder_results_name, "wb") as f:
         pickle.dump(results, f)
-
-
-def normalize_tracker(
-    results: dict, tracker_type: str, custom_functions: list[callable], device: torch.device
-):
-    """Normalize the specified tracker (on or off) values by its count using element-wise multiplication."""
-    for custom_function in custom_functions:
-        counts_TF = results[f"{tracker_type}_count"]
-
-        # Calculate inverse of counts safely
-        inverse_counts_TF = torch.zeros_like(counts_TF).to(device)
-        non_zero_mask = counts_TF > 0
-        inverse_counts_TF[non_zero_mask] = 1 / counts_TF[non_zero_mask]
-
-        tracker_TFRRC = results[custom_function.__name__][tracker_type]
-
-        # Normalize using element-wise multiplication
-        normalized_tracker_TFRRC = tracker_TFRRC * inverse_counts_TF[:, :, None, None, None]
-
-        # Store the normalized results
-        results[custom_function.__name__][f"{tracker_type}_normalized"] = normalized_tracker_TFRRC
-
-    return results
 
 
 if __name__ == "__main__":
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
-    # custom_functions = [chess_utils.board_to_pin_state]
-    autoencoder_path = "autoencoders/group0/ef=4_lr=1e-03_l1=1e-01_layer=5/"
+
+    autoencoder_group_path = "autoencoders/group0/"
+
+    folders = get_nested_folders(autoencoder_group_path)
+
     batch_size = 10
     feature_batch_size = 10
     n_inputs = 100
@@ -304,6 +305,7 @@ if __name__ == "__main__":
 
     construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
-    aggregate_statistics(
-        custom_functions, autoencoder_path, n_inputs, batch_size, device, model_path, data_path
-    )
+    for autoencoder_path in folders:
+        aggregate_statistics(
+            custom_functions, autoencoder_path, n_inputs, batch_size, device, model_path, data_path
+        )

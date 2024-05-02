@@ -7,6 +7,7 @@ from datasets import load_dataset
 from einops import rearrange
 from jaxtyping import Int, Float, jaxtyped
 from torch import Tensor
+import os
 
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
@@ -133,3 +134,23 @@ def collect_activations_batch(
     )  # Shape: (dim_count, batch_size, max_length)
 
     return cur_activations, cur_tokens.value
+
+
+def get_nested_folders(path: str) -> list[str]:
+    """Get a list of folders nested one level deep in the given path which contain an ae.pt file"""
+    folder_names = []
+    # Process current directory and one level deep subdirectories
+    for folder in os.listdir(path):
+        if folder == "utils":
+            continue
+        current_folder = os.path.join(path, folder)
+        if os.path.isdir(current_folder):
+            if "ae.pt" in os.listdir(current_folder):
+                folder_names.append(current_folder + "/")
+            for subfolder in os.listdir(current_folder):  # Process subfolders
+                subfolder_path = os.path.join(current_folder, subfolder)
+                if os.path.isdir(subfolder_path):
+                    if "ae.pt" in os.listdir(subfolder_path):
+                        folder_names.append(subfolder_path + "/")
+
+    return folder_names
