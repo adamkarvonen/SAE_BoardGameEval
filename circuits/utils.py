@@ -8,10 +8,10 @@ from einops import rearrange
 from jaxtyping import Int, Float, jaxtyped
 from torch import Tensor
 import os
+from tqdm import tqdm
 
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
-
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 
 
@@ -107,6 +107,36 @@ def get_feature(
     x_hat, f = ae(x, output_features=True)
 
     return f
+
+
+def get_firing_feature(
+    ae_bundle: AutoEncoderBundle,
+    total_inputs: int,
+    batch_size: int,
+    device: torch.device,
+    threshold: float = 0.0,
+):
+    """Note: total inputs means the number of model activations, not the number of inputs to the model.
+    total_inputs == n_inputs * context_length.
+    For sparse autoencoders with larger expansion factors (16+), over 75% of the features can be dead.
+    """
+    assert total_inputs % batch_size == 0
+    num_iters = total_inputs // batch_size
+
+    features_F = torch.zeros((ae_bundle.dictionary_size,), device=device)
+    for i in tqdm(range(num_iters), desc="Collecting features"):
+        feature_BF = get_feature(ae_bundle.buffer, ae_bundle.ae, device)
+        features_F += (feature_BF != 0).float().sum(dim=0)
+
+    features_F /= total_inputs
+
+    assert features_F.shape[0] == ae_bundle.dictionary_size
+
+    mask = features_F > threshold
+
+    alive_indices = torch.nonzero(mask, as_tuple=False).squeeze()
+
+    return alive_indices
 
 
 # TODO: This should take a list of dictionaries as input. Maybe in ae_bundle?
