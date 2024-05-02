@@ -29,8 +29,13 @@ def print_tensor_memory_usage(tensor):
     print(f"Memory usage: {total_memory} bytes")
 
 
+# TODO Is there a better type hint for callable?
 def construct_eval_dataset(
-    configs: list[chess_utils.Config], n_inputs: int, max_str_length: int = 256, device: str = "cpu"
+    custom_functions: list[callable],
+    n_inputs: int,
+    output_path: str = "data.pkl",
+    max_str_length: int = 256,
+    device: str = "cpu",
 ):
     dataset = load_dataset("adamkarvonen/chess_sae_individual_games_filtered", streaming=False)
     pgn_strings = []
@@ -42,7 +47,9 @@ def construct_eval_dataset(
     data = {}
     data["pgn_strings"] = pgn_strings
 
-    for config in configs:
+    for function in custom_functions:
+        func_name = function.__name__
+        config = chess_utils.config_lookup[func_name]
         if config.num_rows == 8:
             continue
         func_name = config.custom_board_state_function.__name__
@@ -60,7 +67,7 @@ def construct_eval_dataset(
 
         data[func_name] = one_hot_BLRRC
 
-    with open("data.pkl", "wb") as f:
+    with open(output_path, "wb") as f:
         pickle.dump(data, f)
 
     return data
@@ -286,14 +293,16 @@ def normalize_tracker(
 if __name__ == "__main__":
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
     # custom_functions = [chess_utils.board_to_pin_state]
-    autoencoder_path = "../autoencoders/group0/ef=4_lr=1e-03_l1=1e-01_layer=5/"
+    autoencoder_path = "autoencoders/group0/ef=4_lr=1e-03_l1=1e-01_layer=5/"
     batch_size = 10
     feature_batch_size = 10
     n_inputs = 100
     device = "cuda"
     # device = "cpu"
-    model_path = "../models/"
+    model_path = "models/"
     data_path = "data.pkl"
+
+    construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
     aggregate_statistics(
         custom_functions, autoencoder_path, n_inputs, batch_size, device, model_path, data_path
