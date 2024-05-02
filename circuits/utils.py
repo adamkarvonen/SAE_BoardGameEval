@@ -27,7 +27,7 @@ class AutoEncoderBundle:
 
 def get_ae_bundle(
     autoencoder_path: str,
-    device: str,
+    device: torch.device,
     data: Any,
     batch_size: int,
     model_path: str = "models/",

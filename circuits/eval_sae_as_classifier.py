@@ -19,12 +19,17 @@ import circuits.chess_utils as chess_utils
 
 
 def initialize_results_dict(
-    custom_functions: list[callable], num_thresholds: int, num_features: int
+    custom_functions: list[callable], num_thresholds: int, num_features: int, device: torch.device
 ) -> dict:
     """For every function for every threshold for every feature, we keep track of the counts for every element
     in the state stack, along with the activations counts. This is done in parallel to make it fast.
     """
     results = {}
+
+    on_counter_TF = torch.zeros(num_thresholds, num_features).to(device)
+    results["on_count"] = on_counter_TF
+    results["off_count"] = on_counter_TF.clone()
+
     for custom_function in custom_functions:
         results[custom_function.__name__] = {}
         config = chess_utils.config_lookup[custom_function.__name__]
@@ -37,10 +42,6 @@ def initialize_results_dict(
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
         results[custom_function.__name__]["off"] = on_tracker_TFRRC.clone()
 
-        on_counter_TF = torch.zeros(num_thresholds, num_features).to(device)
-        results[custom_function.__name__]["on_count"] = on_counter_TF
-        results[custom_function.__name__]["off_count"] = on_counter_TF.clone()
-
     return results
 
 
@@ -50,6 +51,7 @@ def get_data_batch(
     start: int,
     end: int,
     custom_functions: list[callable],
+    device: torch.device,
 ) -> dict:
     """If the custom function returns a board of 8 x 8 x num_classes, we construct it on the fly.
     In this case, creating the state stack is very cheap compared to doing the statistics aggregation.
@@ -80,6 +82,7 @@ def aggregate_batch_statistics(
     f_start: int,
     f_end: int,
     f_batch_size: int,
+    device: torch.device,
 ) -> dict:
     """For every threshold for every activation for every feature, we check if it's above the threshold.
     If so, for every custom function we add the state stack (board or something like pin state) to the on_tracker.
@@ -90,6 +93,9 @@ def aggregate_batch_statistics(
 
     active_counts_TF = einops.reduce(active_indices_TFBL, "T F B L -> T F", "sum")
     off_counts_TF = einops.reduce(~active_indices_TFBL, "T F B L -> T F", "sum")
+
+    results["on_count"][:, f_start:f_end] += active_counts_TF
+    results["off_count"][:, f_start:f_end] += off_counts_TF
 
     for custom_function in custom_functions:
         on_tracker_TFRRC = results[custom_function.__name__]["on"]
@@ -120,9 +126,6 @@ def aggregate_batch_statistics(
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
         results[custom_function.__name__]["off"] = off_tracker_FTRRC
 
-        results[custom_function.__name__]["on_count"][:, f_start:f_end] += active_counts_TF
-        results[custom_function.__name__]["off_count"][:, f_start:f_end] += off_counts_TF
-
     return results
 
 
@@ -131,10 +134,12 @@ def aggregate_statistics(
     autoencoder_path: str,
     n_inputs: int,
     batch_size: int,
-    device: str,
+    device: torch.device,
     model_path: str,
     data_path: str,
 ):
+    """For every input, for every feature, call `aggregate_batch_statistics()`.
+    As an example of desired behavior, view tests/test_classifier_eval.py."""
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
@@ -166,14 +171,14 @@ def aggregate_statistics(
         torch.arange(0.0, 1.0, 0.1).view(-1, 1, 1, 1).to(device)
     )  # Reshape for broadcasting
 
-    results = initialize_results_dict(custom_functions, len(thresholds_T111))
+    results = initialize_results_dict(custom_functions, len(thresholds_T111), num_features, device)
 
     for i in tqdm(range(n_iters)):
         start = i * batch_size
         end = (i + 1) * batch_size
         inputs_BL = pgn_strings[start:end]
 
-        batch_data = get_data_batch(data, inputs_BL, start, end, custom_functions)
+        batch_data = get_data_batch(data, inputs_BL, start, end, custom_functions, device)
 
         all_activations_FBL, encoded_inputs = collect_activations_batch(
             ae_bundle, inputs_BL, features
@@ -200,10 +205,34 @@ def aggregate_statistics(
                 f_start,
                 f_end,
                 f_batch_size,
+                device,
             )
 
     with open("results.pkl", "wb") as f:
         pickle.dump(results, f)
+
+
+def normalize_tracker(
+    results: dict, tracker_type: str, custom_functions: list[callable], device: torch.device
+):
+    """Normalize the specified tracker (on or off) values by its count using element-wise multiplication."""
+    for custom_function in custom_functions:
+        counts_TF = results[f"{tracker_type}_count"]
+
+        # Calculate inverse of counts safely
+        inverse_counts_TF = torch.zeros_like(counts_TF).to(device)
+        non_zero_mask = counts_TF > 0
+        inverse_counts_TF[non_zero_mask] = 1 / counts_TF[non_zero_mask]
+
+        tracker_TFRRC = results[custom_function.__name__][tracker_type]
+
+        # Normalize using element-wise multiplication
+        normalized_tracker_TFRRC = tracker_TFRRC * inverse_counts_TF[:, :, None, None, None]
+
+        # Store the normalized results
+        results[custom_function.__name__][f"{tracker_type}_normalized"] = normalized_tracker_TFRRC
+
+    return results
 
 
 if __name__ == "__main__":
