@@ -108,23 +108,23 @@ def get_feature(
     return f
 
 
-# TODO: This should take a list of dictionaries as input
+# TODO: This should take a list of dictionaries as input. Maybe in ae_bundle?
+@torch.no_grad()
 def collect_activations_batch(
-    model: LanguageModel,
-    submodule,
-    max_length: int,
+    ae_bundle: AutoEncoderBundle,
     inputs: list[str],
-    dictionary: AutoEncoder,
     dims: Int[Tensor, "num_dims"],
 ) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
-    with model.trace(inputs, invoker_args=dict(max_length=max_length, truncation=True)):
-        cur_tokens = model.input[1][
+    with ae_bundle.model.trace(
+        inputs, invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
+    ):
+        cur_tokens = ae_bundle.model.input[1][
             "input_ids"
         ].save()  # if you're getting errors, check here; might only work for pythia models
-        cur_activations = submodule.output
+        cur_activations = ae_bundle.submodule.output
         if type(cur_activations.shape) == tuple:
             cur_activations = cur_activations[0]
-        cur_activations = dictionary.encode(cur_activations)
+        cur_activations = ae_bundle.ae.encode(cur_activations)
         cur_activations = cur_activations[
             :, :, dims
         ].save()  # Shape: (batch_size, max_length, dim_count)

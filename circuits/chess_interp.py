@@ -8,8 +8,8 @@ from nnsight import LanguageModel
 
 from circuits.dictionary_learning import AutoEncoder, ActivationBuffer
 import circuits.chess_utils as chess_utils
-from circuits.chess_utils import Config
-from circuits.utils import collect_activations_batch
+from circuits.chess_utils import Config, get_num_classes
+from circuits.utils import collect_activations_batch, get_ae_bundle, AutoEncoderBundle
 
 
 class BoardResultsConfig(BaseModel):
@@ -56,17 +56,9 @@ def merge_feature_dictionaries(
     return feature_dict
 
 
-def get_num_classes(config: Config) -> int:
-    return abs(config.min_val) + abs(config.max_val) + 1
-
-
 @torch.no_grad()
 def examine_dimension_chess(
-    model: LanguageModel,
-    submodule,
-    buffer: ActivationBuffer,
-    dictionary: AutoEncoder,
-    max_length: int,
+    ae_bundle: AutoEncoderBundle,
     n_inputs: int,
     dims: torch.Tensor,
     k: int = 30,
@@ -92,20 +84,22 @@ def examine_dimension_chess(
     # TODO Refactor activations to be shape (dim_count, top_k, max_length) to reduce memory usage
     # Processing time slows down when using float16, using float32 for now
     activations = torch.zeros(
-        (dim_count, n_inputs, max_length), device=processing_device, dtype=torch.float32
+        (dim_count, n_inputs, ae_bundle.context_length),
+        device=processing_device,
+        dtype=torch.float32,
     )
-    tokens = torch.zeros((n_inputs, max_length), device=processing_device, dtype=torch.int64)
+    tokens = torch.zeros(
+        (n_inputs, ae_bundle.context_length), device=processing_device, dtype=torch.int64
+    )
 
     for i in tqdm(range(n_iters), total=n_iters, desc="Collecting activations"):
-        inputs = buffer.text_batch(batch_size=batch_size)
+        inputs = ae_bundle.buffer.text_batch(batch_size=batch_size)
 
-        cur_activations, cur_tokens = collect_activations_batch(
-            model, submodule, max_length, inputs, dictionary, dims
-        )
+        cur_activations, cur_tokens = collect_activations_batch(ae_bundle, inputs, dims)
 
         activations[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
         tokens[i * batch_size : (i + 1) * batch_size, :] = cur_tokens
-    decoded_tokens = [model.tokenizer.decode(tokens[i]) for i in range(tokens.shape[0])]
+    decoded_tokens = [ae_bundle.model.tokenizer.decode(tokens[i]) for i in range(tokens.shape[0])]
 
     per_dim_stats = {}
     idxs_dict = {}
@@ -127,7 +121,7 @@ def examine_dimension_chess(
             idxs = idxs_dict[tok]
             token_mean_acts[tok] = individual_acts[idxs].mean().item()
         top_tokens = sorted(token_mean_acts.items(), key=lambda x: x[1], reverse=True)[:k]
-        top_tokens = [(model.tokenizer.decode(tok), act) for tok, act in top_tokens]
+        top_tokens = [(ae_bundle.model.tokenizer.decode(tok), act) for tok, act in top_tokens]
 
         flattened_acts = rearrange(individual_acts, "b n -> (b n)")
         topk_indices = torch.argsort(flattened_acts, dim=0, descending=True)[:k]
@@ -301,31 +295,32 @@ def board_analysis(
                 average_input_length = sum(len(pgn) for pgn in inputs) / len(inputs)
                 results[config_name].total_average_length += average_input_length
 
-                feature_info = {
-                    "name": config.custom_board_state_function.__name__,
-                    "max_activation": activations[0][-1].item(),
-                }
-
                 if notebook_usage:
                     for pgn in inputs:
                         print(pgn)
 
-                if config.num_rows == 8:
+                common_board_state = torch.zeros(
+                    config.num_rows,
+                    config.num_cols,
+                    get_num_classes(config),
+                    device=device,
+                    dtype=torch.int8,
+                )
 
-                    common_board_state = torch.zeros(
-                        8, 8, get_num_classes(config), device=device, dtype=torch.int8
-                    )
-                    for idx in zip(*common_indices):
-                        results[config_name].board_tracker[idx[0]][idx[1]] += 1
-                        results[config_name].per_class_dict[idx[2].item()] += 1
-                        results[config_name].average_matches_per_dim += 1
+                for idx in zip(*common_indices):
+                    results[config_name].board_tracker[idx[0]][idx[1]] += 1
+                    results[config_name].per_class_dict[idx[2].item()] += 1
+                    results[config_name].average_matches_per_dim += 1
 
-                        common_board_state[idx[0], idx[1], idx[2]] = 1
+                    common_board_state[idx[0], idx[1], idx[2]] = 1
+                    if notebook_usage:
+                        print(f"Dim: {dim}, Index: {idx}")
 
-                        if notebook_usage:
-                            print(f"Dim: {dim}, Index: {idx}")
-
-                    feature_info["board_state"] = common_board_state
+                feature_info = {
+                    "name": config.custom_board_state_function.__name__,
+                    "max_activation": activations[0][-1].item(),
+                    "board_state": common_board_state,
+                }
 
                 feature_dict[dim].append(feature_info)
 

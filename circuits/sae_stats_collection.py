@@ -71,11 +71,7 @@ def get_ae_stats(
     idx = torch.nonzero(mask, as_tuple=False).squeeze()
 
     per_dim_stats = examine_dimension_chess(
-        ae_bundle.model,
-        ae_bundle.submodule,
-        ae_bundle.buffer,
-        dictionary=ae_bundle.ae,
-        max_length=ae_bundle.context_length,
+        ae_bundle,
         n_inputs=n_inputs,
         dims=idx[:max_dims],
         k=top_k + 1,
