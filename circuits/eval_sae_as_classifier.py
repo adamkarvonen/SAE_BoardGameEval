@@ -3,6 +3,7 @@ import pickle
 import torch
 import einops
 from datasets import load_dataset
+from typing import Callable
 
 from circuits.utils import get_ae_bundle, collect_activations_batch, get_nested_folders
 import circuits.chess_utils as chess_utils
@@ -23,12 +24,12 @@ def print_tensor_memory_usage(tensor):
     total_memory /= 1024**2  # total memory in MiB
     print(f"Element size: {element_size} bytes")
     print(f"Number of elements: {num_elements}")
-    print(f"Memory usage: {total_memory} bytes")
+    print(f"Memory usage: {total_memory} MB")
 
 
-# TODO Is there a better type hint for callable?
+# TODO: Make device consistently use torch.device type hint
 def construct_eval_dataset(
-    custom_functions: list[callable],
+    custom_functions: list[Callable],
     n_inputs: int,
     output_path: str = "data.pkl",
     max_str_length: int = 256,
@@ -71,7 +72,7 @@ def construct_eval_dataset(
 
 
 def initialize_results_dict(
-    custom_functions: list[callable], num_thresholds: int, num_features: int, device: torch.device
+    custom_functions: list[Callable], num_thresholds: int, num_features: int, device: torch.device
 ) -> dict:
     """For every function for every threshold for every feature, we keep track of the counts for every element
     in the state stack, along with the activations counts. This is done in parallel to make it fast.
@@ -102,7 +103,7 @@ def get_data_batch(
     inputs_BL: list[str],
     start: int,
     end: int,
-    custom_functions: list[callable],
+    custom_functions: list[Callable],
     device: torch.device,
 ) -> dict:
     """If the custom function returns a board of 8 x 8 x num_classes, we construct it on the fly.
@@ -127,7 +128,7 @@ def get_data_batch(
 
 def aggregate_batch_statistics(
     results: dict,
-    custom_functions: list[callable],
+    custom_functions: list[Callable],
     activations_FBL: torch.Tensor,
     thresholds_T111: torch.Tensor,
     batch_data: dict[str, torch.Tensor],
@@ -182,7 +183,7 @@ def aggregate_batch_statistics(
 
 
 def normalize_tracker(
-    results: dict, tracker_type: str, custom_functions: list[callable], device: torch.device
+    results: dict, tracker_type: str, custom_functions: list[Callable], device: torch.device
 ):
     """Normalize the specified tracker (on or off) values by its count using element-wise multiplication."""
     for custom_function in custom_functions:
@@ -205,7 +206,7 @@ def normalize_tracker(
 
 
 def aggregate_statistics(
-    custom_functions: list[callable],
+    custom_functions: list[Callable],
     autoencoder_path: str,
     n_inputs: int,
     batch_size: int,
@@ -230,7 +231,9 @@ def aggregate_statistics(
     pgn_strings = data["pgn_strings"]
     del data["pgn_strings"]
 
-    ae_bundle = get_ae_bundle(autoencoder_path, device, data, batch_size, model_path)
+    firing_rate_data = iter(data["pgn_strings"])
+
+    ae_bundle = get_ae_bundle(autoencoder_path, device, firing_rate_data, batch_size, model_path)
     ae_bundle.buffer = None
 
     features = torch.arange(0, ae_bundle.dictionary_size, device=device)

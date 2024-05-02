@@ -250,7 +250,7 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
 class Config:
     min_val: int
     max_val: int
-    custom_board_state_function: callable
+    custom_board_state_function: Callable
     num_rows: int = 8
     num_cols: int = 8
 

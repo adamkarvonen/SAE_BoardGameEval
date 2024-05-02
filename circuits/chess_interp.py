@@ -3,7 +3,7 @@ from einops import rearrange
 import torch
 from tqdm import tqdm
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Callable
 from nnsight import LanguageModel
 
 from circuits.dictionary_learning import AutoEncoder, ActivationBuffer
@@ -160,7 +160,7 @@ def syntax_analysis(
     minimum_number_of_activations: int,
     top_k: int,
     max_dims: int,
-    syntax_function: callable,
+    syntax_function: Callable,
     feature_dict: Optional[dict[int, list[dict]]] = None,
     notebook_usage: bool = False,
     verbose: bool = False,
