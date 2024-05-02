@@ -50,7 +50,7 @@ def get_ae_bundle(
     )
     model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
 
-    submodule = model.transformer.h[layer].mlp  # layer 1 MLP
+    submodule = model.transformer.h[layer]  # residual stream after the layer
     activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
     dictionary_size = config["trainer"]["dictionary_size"]
 
