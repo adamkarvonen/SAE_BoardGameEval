@@ -246,6 +246,97 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
     return state
 
 
+@dataclass
+class Config:
+    min_val: int
+    max_val: int
+    custom_board_state_function: callable
+    num_rows: int = 8
+    num_cols: int = 8
+
+
+piece_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_piece_state,
+)
+
+color_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=board_to_piece_color_state,
+)
+
+threat_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_threat_state,
+)
+
+legal_move_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_legal_moves_state,
+)
+
+prev_move_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_prev_state,
+)
+
+
+eval_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=board_to_eval_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+skill_config = Config(
+    min_val=-2,
+    max_val=20,
+    custom_board_state_function=board_to_skill_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+check_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_check_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+pin_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_pin_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+all_configs = [
+    piece_config,
+    color_config,
+    threat_config,
+    legal_move_config,
+    prev_move_config,
+    eval_config,
+    skill_config,
+    check_config,
+    pin_config,
+]
+
+config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}
+
+
+def get_num_classes(config: Config) -> int:
+    return abs(config.min_val) + abs(config.max_val) + 1
+
+
 def state_stack_to_chess_board(state: torch.Tensor) -> chess.Board:
     """Given a state stack, return a chess.Board object.
     WARNING: The board will not include any information about whose turn it is, castling rights, en passant, etc.
@@ -280,6 +371,7 @@ def pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess
     return board
 
 
+# TODO This should take a list of custom_board_to_state_fns
 def create_state_stack(
     moves_string: str,
     custom_board_to_state_fn: Callable[[chess.Board], torch.Tensor],
@@ -352,18 +444,19 @@ def create_state_stacks(
 
 
 def state_stack_to_one_hot(
-    num_rows: int,
-    num_cols: int,
-    min_val: int,
-    max_val: int,
+    config: Config,
     device: torch.device,
     state_stack: torch.Tensor,
-    user_mapping: Optional[dict[int, int]] = None,
+    user_mapping: Optional[dict[int, int]] = None,  # Only used for skill mapping
 ) -> Int[Tensor, "sample_size num_white_moves rows cols one_hot_range"]:
     """Input shape: assert(state_stacks_all_chars.shape) == (sample_size, game_length, rows, cols)
     Output shape: assert(state_stacks_one_hot.shape) == (sample_size, game_length, rows, cols, one_hot_range)
     """
-    range_size = max_val - min_val + 1
+    range_size = get_num_classes(config)
+
+    # TODO: Is this all we need to not one hot encode binary values?
+    # if range_size <= 2:
+    #     return state_stack
 
     mapping = {}
     if user_mapping:
@@ -372,15 +465,15 @@ def state_stack_to_one_hot(
         max_val = max(mapping.values())
         range_size = max_val - min_val + 1
     else:
-        for val in range(min_val, max_val + 1):
-            mapping[val] = val - min_val
+        for val in range(config.min_val, config.max_val + 1):
+            mapping[val] = val - config.min_val
 
     # Initialize the one-hot tensor
     one_hot = torch.zeros(
         state_stack.shape[0],  # num games
         state_stack.shape[1],  # num moves
-        num_rows,
-        num_cols,
+        config.num_rows,
+        config.num_cols,
         range_size,
         device=device,
         dtype=DEFAULT_DTYPE,
@@ -620,93 +713,6 @@ def decode_list(meta: dict, l: list[int]) -> str:
     return "".join([itos[i] for i in l])
 
 
-@dataclass
-class Config:
-    min_val: int
-    max_val: int
-    custom_board_state_function: callable
-    num_rows: int = 8
-    num_cols: int = 8
-
-
-piece_config = Config(
-    min_val=-6,
-    max_val=6,
-    custom_board_state_function=board_to_piece_state,
-)
-
-color_config = Config(
-    min_val=-1,
-    max_val=1,
-    custom_board_state_function=board_to_piece_color_state,
-)
-
-threat_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_threat_state,
-)
-
-legal_move_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_legal_moves_state,
-)
-
-prev_move_config = Config(
-    min_val=-6,
-    max_val=6,
-    custom_board_state_function=board_to_prev_state,
-)
-
-
-eval_config = Config(
-    min_val=-1,
-    max_val=1,
-    custom_board_state_function=board_to_eval_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-skill_config = Config(
-    min_val=-2,
-    max_val=20,
-    custom_board_state_function=board_to_skill_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-check_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_check_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-pin_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_pin_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-all_configs = [
-    piece_config,
-    color_config,
-    threat_config,
-    legal_move_config,
-    prev_move_config,
-    eval_config,
-    skill_config,
-    check_config,
-    pin_config,
-]
-
-config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}
-
-
 def chess_boards_to_state_stack(
     chess_boards: list[chess.Board],
     device: torch.device,
@@ -718,9 +724,7 @@ def chess_boards_to_state_stack(
     for board in chess_boards:
         state_stack = config.custom_board_state_function(board, skill)
         state_stack = state_stack.view(1, 1, config.num_rows, config.num_cols)
-        one_hot = state_stack_to_one_hot(
-            config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
-        )
+        one_hot = state_stack_to_one_hot(config, device, state_stack)
         one_hot_list.append(one_hot)
     stacked_one_hot = torch.stack(one_hot_list, dim=0)
     return stacked_one_hot
@@ -737,9 +741,7 @@ def mask_initial_board_states(
     initial_board = chess.Board()
     initial_state = config.custom_board_state_function(initial_board, skill)
     initial_state = initial_state.view(1, 1, config.num_rows, config.num_cols)
-    initial_one_hot = state_stack_to_one_hot(
-        config.num_rows, config.num_cols, config.min_val, config.max_val, device, initial_state
-    )
+    initial_one_hot = state_stack_to_one_hot(config, device, initial_state)
 
     mask = (initial_one_hot == 1) & (one_hot_list == 1)
     one_hot_list[mask] = 0
@@ -751,7 +753,7 @@ def get_averaged_states(
 ) -> Int[Tensor, "num_rows num_cols num_options"]:
     summed_one_hot = torch.sum(one_hot_stack, dim=0)
     averaged_one_hot = summed_one_hot / one_hot_stack.shape[0]
-    averaged_one_hot = averaged_one_hot.squeeze()
+    averaged_one_hot = averaged_one_hot
     return averaged_one_hot
 
 
