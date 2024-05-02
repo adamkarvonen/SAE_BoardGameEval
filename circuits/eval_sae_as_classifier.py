@@ -283,7 +283,7 @@ def aggregate_statistics(
                 device,
             )
 
-    autoencoder_results_name = autoencoder_path.replace("/", "_") + "_results.pkl"
+    autoencoder_results_name = autoencoder_path.replace("/", "_") + "results.pkl"
     with open(autoencoder_results_name, "wb") as f:
         pickle.dump(results, f)
 
@@ -303,9 +303,14 @@ if __name__ == "__main__":
     model_path = "models/"
     data_path = "data.pkl"
 
+    print("Constructing evaluation dataset...")
+
     construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
+    print("Starting evaluation...")
+
     for autoencoder_path in folders:
+        print("Evaluating autoencoder:", autoencoder_path)
         aggregate_statistics(
             custom_functions, autoencoder_path, n_inputs, batch_size, device, model_path, data_path
         )
