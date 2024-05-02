@@ -271,7 +271,7 @@ def aggregate_statistics(
         custom_functions, len(thresholds_T111), alive_features_F, device
     )
 
-    for i in tqdm(range(n_iters)):
+    for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
         inputs_BL = pgn_strings[start:end]
@@ -320,7 +320,7 @@ if __name__ == "__main__":
 
     batch_size = 10
     feature_batch_size = 10
-    n_inputs = 10
+    n_inputs = 1000
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
