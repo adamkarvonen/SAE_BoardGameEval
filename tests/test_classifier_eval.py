@@ -38,8 +38,8 @@ def test_aggregate_batch_statistics():
 
     game_len = len(inputs_BL[0])
     data = {}
-    data["board_to_pin_state"] = torch.zeros(batch_size, game_len, 1, 1, 2).to(DEVICE)
-    data["board_to_pin_state"][:, 0:5, :, :, 1] = 1  # All games have a pin before the first move
+    data["board_to_pin_state"] = torch.zeros(batch_size, game_len, 1, 1, 1).to(DEVICE)
+    data["board_to_pin_state"][:, 0:5, :, :, 0] = 1  # All games have a pin before the first move
 
     batch_data = eval_sae_as_classifier.get_data_batch(
         data, inputs_BL, 0, batch_size, custom_functions, DEVICE
@@ -108,5 +108,5 @@ def test_aggregate_batch_statistics():
 
     assert torch.equal(
         results["board_to_pin_state"]["on_normalized"][0, 0, :, :, :].squeeze(),
-        torch.tensor([0.0, 1.0]).to(DEVICE),
+        torch.tensor(1.0).to(DEVICE),
     )

@@ -334,7 +334,10 @@ config_lookup = {config.custom_board_state_function.__name__: config for config 
 
 
 def get_num_classes(config: Config) -> int:
-    return abs(config.min_val) + abs(config.max_val) + 1
+    num_classes = abs(config.min_val) + abs(config.max_val) + 1
+    if num_classes == 2:
+        num_classes = 1
+    return num_classes
 
 
 def state_stack_to_chess_board(state: torch.Tensor) -> chess.Board:
@@ -454,9 +457,9 @@ def state_stack_to_one_hot(
     """
     range_size = get_num_classes(config)
 
-    # TODO: Is this all we need to not one hot encode binary values?
-    # if range_size <= 2:
-    #     return state_stack
+    # This will return binary values as scalar, not one-hot
+    if range_size <= 2:
+        return state_stack.unsqueeze(-1)
 
     mapping = {}
     if user_mapping:
