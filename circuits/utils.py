@@ -119,17 +119,19 @@ def get_firing_features(
     batch_size: int,
     device: torch.device,
     threshold: float = 0.0,
-):
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Note: total inputs means the number of model activations, not the number of inputs to the model.
     total_inputs == n_inputs * context_length.
     For sparse autoencoders with larger expansion factors (16+), over 75% of the features can be dead.
     """
 
     num_iters = total_inputs // batch_size
+    max_features = torch.full((ae_bundle.dictionary_size,), float("-inf"), device=device)
 
     features_F = torch.zeros((ae_bundle.dictionary_size,), device=device)
     for i in tqdm(range(num_iters), desc="Collecting features"):
         feature_BF = get_feature(ae_bundle.buffer, ae_bundle.ae, device)
+        max_features = torch.max(max_features, feature_BF.max(dim=0).values)
         features_F += (feature_BF != 0).float().sum(dim=0)
 
     features_F /= total_inputs
@@ -139,8 +141,9 @@ def get_firing_features(
     mask = features_F > threshold
 
     alive_indices = torch.nonzero(mask, as_tuple=False).squeeze()
+    max_features = max_features[alive_indices]
 
-    return alive_indices
+    return alive_indices, max_features
 
 
 # TODO: This should take a list of dictionaries as input. Maybe in ae_bundle?
