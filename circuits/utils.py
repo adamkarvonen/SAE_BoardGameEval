@@ -9,6 +9,7 @@ from jaxtyping import Int, Float, jaxtyped
 from torch import Tensor
 import os
 from tqdm import tqdm
+from transformers import GPT2LMHeadModel
 
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
@@ -48,6 +49,8 @@ def get_ae_bundle(
     model = convert_nanogpt_model(
         f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
     )
+    # I'm pretty sure this will work, but I haven't tested it
+    # model = GPT2LMHeadModel.from_pretrained("adamkarvonen/8LayerChessGPT2")
     model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
 
     submodule = model.transformer.h[layer]  # residual stream after the layer
