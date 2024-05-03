@@ -18,9 +18,9 @@ cd ..
 
 cd autoencoders
 
-wget -O group0.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group0.zip?download=true"
-unzip group0.zip
-rm group0.zip
+wget -O group1.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group1.zip?download=true"
+unzip group1.zip
+rm group1.zip
 
 cd ..
 
