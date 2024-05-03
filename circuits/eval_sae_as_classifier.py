@@ -4,6 +4,7 @@ import torch
 import einops
 from datasets import load_dataset
 from typing import Callable
+import math
 
 from circuits.utils import (
     get_ae_bundle,
@@ -173,6 +174,8 @@ def aggregate_batch_statistics(
             T=len(thresholds_T111),
         )
 
+        # TODO The next 2 operations consume almost all of the compute. I don't think it will work,
+        # but maybe we can only do 1 of these operations?
         active_boards_sum_TFRRC = einops.reduce(
             boards_TFBLRRC * active_indices_TFBL[:, :, :, :, None, None, None],
             "T F B L R1 R2 C -> T F R1 R2 C",
@@ -250,7 +253,10 @@ def aggregate_statistics(
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
-    alive_features_F = get_firing_features(ae_bundle, firing_rate_n_inputs, batch_size, device)
+    # TODO: Custom thresholds per feature based on max activations
+    alive_features_F, max_activations_F = get_firing_features(
+        ae_bundle, firing_rate_n_inputs, batch_size, device
+    )
     ae_bundle.buffer = None
     num_features = len(alive_features_F)
     print(
@@ -261,10 +267,11 @@ def aggregate_statistics(
     assert n_inputs % batch_size == 0
 
     n_iters = n_inputs // batch_size
-    num_feature_iters = num_features // feature_batch_size
+    # We round up to ensure we don't ignore the remainder of features
+    num_feature_iters = math.ceil(num_features / feature_batch_size)
 
     thresholds_T111 = (
-        torch.arange(0.0, 1.0, 0.1).view(-1, 1, 1, 1).to(device)
+        torch.arange(0.0, 4.1, 0.5).view(-1, 1, 1, 1).to(device)
     )  # Reshape for broadcasting
 
     results = initialize_results_dict(
@@ -306,6 +313,14 @@ def aggregate_statistics(
                 device,
             )
 
+    hyperparameters = {
+        "n_inputs": n_inputs,
+        "context_length": ae_bundle.context_length,
+        "thresholds": thresholds_T111,
+    }
+    results["hyperparameters"] = hyperparameters
+
+    # TODO: Move tensors to CPU before pickling
     autoencoder_results_name = autoencoder_path.replace("/", "_") + "results.pkl"
     with open(autoencoder_results_name, "wb") as f:
         pickle.dump(results, f)
@@ -314,7 +329,7 @@ def aggregate_statistics(
 if __name__ == "__main__":
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
 
-    autoencoder_group_path = "autoencoders/group0/"
+    autoencoder_group_path = "autoencoders/group1/"
 
     folders = get_nested_folders(autoencoder_group_path)
 
