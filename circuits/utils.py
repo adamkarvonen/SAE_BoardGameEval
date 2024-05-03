@@ -193,3 +193,21 @@ def get_nested_folders(path: str) -> list[str]:
                         folder_names.append(subfolder_path + "/")
 
     return folder_names
+
+
+def to_cpu(data):
+    """
+    Recursively move tensors in a nested dictionary to CPU.
+    """
+    if isinstance(data, dict):
+        # If it's a dictionary, apply recursively to each value
+        return {key: to_cpu(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        # If it's a list, apply recursively to each element
+        return [to_cpu(item) for item in data]
+    elif isinstance(data, torch.Tensor):
+        # If it's a tensor, move it to CPU
+        return data.cpu()
+    else:
+        # If it's neither, return it as is
+        return data

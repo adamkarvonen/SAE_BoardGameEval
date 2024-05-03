@@ -11,6 +11,7 @@ from circuits.utils import (
     collect_activations_batch,
     get_nested_folders,
     get_firing_features,
+    to_cpu,
 )
 import circuits.chess_utils as chess_utils
 
@@ -320,7 +321,7 @@ def aggregate_statistics(
     }
     results["hyperparameters"] = hyperparameters
 
-    # TODO: Move tensors to CPU before pickling
+    results = to_cpu(results)
     autoencoder_results_name = autoencoder_path.replace("/", "_") + "results.pkl"
     with open(autoencoder_results_name, "wb") as f:
         pickle.dump(results, f)
