@@ -334,6 +334,9 @@ if __name__ == "__main__":
 
     folders = get_nested_folders(autoencoder_group_path)
 
+    # At these settings, it uses around 3GB of VRAM
+    # VRAM does not scale with n_inputs, only batch_size
+    # You can increase batch_size if you have more VRAM, but it's not a large speedup
     batch_size = 10
     feature_batch_size = 10
     n_inputs = 1000
