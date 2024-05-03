@@ -4,6 +4,8 @@ To train Chess SAEs, run the `setup.sh` script, then run `python circuits/train.
 
 `setup.sh` will download and unzip some of my SAEs that I have on HuggingFace. If you have SAEs trained on Chess-GPT, you can place the folders (which contain `ae.pt` and `config.json`) into `autoencoders`. Or you can place them into `autoencoders/utils/` and run this: `rename_folder_for_config.ipynb` for descriptive folder names. It may also be required because I add some metadata to `config.json` there.
 
+My SAEs and some saved eval results are here: https://huggingface.co/adamkarvonen/chess_saes
+
 To perform analysis on a group of SAEs, run `python circuits/eval_sae_as_classifier.py`. At the bottom of the file, adjust the `custom_functions` list if needed. Note that there are "board states", such as `board_to_piece_state`, which contain the one hot state of the board at every character, or (832 elements = 8 rows x 8 cols x 13 possibilities per square). These run about 10x slower than higher level concepts such as `board_to_pin_state`, which only contain 1 element (binary value of is there a pin on the board).
 
 To analyze 1000 inputs on a SAE with 1200 alive features on `board_to_pin_state` on an RTX 3090, it takes 11 seconds. For `board_to_pin_state` and `board_to_piece_state`, it's 140 seconds.
