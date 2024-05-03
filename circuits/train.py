@@ -46,7 +46,7 @@ trainer_configs = [
         "warmup_steps": 2000,
         "resample_steps": resample_steps,
         "activation_dim": activation_dim,
-        "dictionary_size": dictionary_size,
+        "dict_size": dictionary_size,
     }
     for lr, l1, dictionary_size in param_combinations
 ]
