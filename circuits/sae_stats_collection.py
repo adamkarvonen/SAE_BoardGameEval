@@ -79,14 +79,17 @@ def get_ae_stats(
         processing_device=torch.device("cpu"),
     )
 
-    eval_results = evaluate(
-        ae_bundle.ae,
-        ae_bundle.buffer,
-        max_len=ae_bundle.context_length,
-        batch_size=batch_size,
-        io="out",
-        device=device,
-    )
+    # TODO getting the eval_results is broken. I think it's because I switched to SAEs on the residual stream, not the mlp output
+    # The residual stream returns a tuple of parameters, not a single parameter. This is just a guess though.
+    # eval_results = evaluate(
+    #     ae_bundle.ae,
+    #     ae_bundle.buffer,
+    #     max_len=ae_bundle.context_length,
+    #     batch_size=batch_size,
+    #     io="out",
+    #     device=device,
+    # )
+    eval_results = {}
 
     if save_results:
         pickle.dump(per_dim_stats, open(f"{autoencoder_path}per_dim_stats.pkl", "wb"))
