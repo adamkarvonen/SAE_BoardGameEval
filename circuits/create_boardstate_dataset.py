@@ -1,12 +1,57 @@
-###########################
+#%%##########################
 # Creating a dataset evaluating every character/move in a PGN string with board state features.
 ###########################
 
 from collections import defaultdict
+import numpy as np
+from tqdm import tqdm, trange
+from IPython.display import SVG, display
+
 
 import chess
+import chess.svg
 import datasets
 
+# Load datset
+dataset = datasets.load_dataset("adamkarvonen/chess_sae_individual_games_filtered")
+
+
+def test_evaluator_func(dataset, func, kwargs={}, verbose=False):
+    print('testing', func.__name__)
+    true_count = 0
+    max_tries = int(1e4)
+    for i in trange(max_tries):
+        random_index = np.random.randint(0, len(dataset))
+        game_pgn = dataset[random_index]['text']
+        board = chess.Board()
+        for m in game_pgn.split():
+            move_str = m
+            # Advance the board
+            if "." in m:
+                m = m.split(".")[1]
+            try:
+                board.push_san(m)
+                if verbose:
+                    print(board)
+                    print("-"*50)
+            except (chess.InvalidMoveError, chess.IllegalMoveError) as e:
+                break
+            func_output = func(board, **kwargs)
+            if func_output is True:
+                print(f'true_count: {true_count}')
+                print(f'func: {func.__name__}, value: {func_output}')
+                print(f'kwargs: {kwargs}')
+                rec_move_color = 'white' if board.turn == chess.BLACK else 'black'
+                print(f'color of last move: {rec_move_color}')
+                print(f'most recent move: {move_str}')
+                # print(board)
+                svg = chess.svg.board(board)
+                display(SVG(svg))
+                print('_'*50)
+                true_count += 1
+                break
+        if true_count >=10:
+            break
 
 # Define evaluator functions
 def board_to_check_int(board: chess.Board):
@@ -19,10 +64,78 @@ def board_to_color(board: chess.Board):
     """Return the color of the move which has been played most recently. 0 if white, 1 if black. (board.turn returns the color of the next move to be played.)"""
     return "w" if board.turn == chess.BLACK else "b"
 
+def check_fork(board, perspective, attacker_piece=chess.KNIGHT, target_pieces=[chess.ROOK, chess.QUEEN, chess.KING]):
+    '''True if a piece is attacking at least two higher value pieces and is not pinned. Perspective can be 'mine' or 'other' to specify the player to move, after the most recent move.'''
+    # Determine the color of the knights to check based on the perspective
+    if perspective == "mine":
+        color = board.turn
+    elif perspective == "other":
+        color = not board.turn
+    else:
+        raise ValueError("Perspective must be 'mine' or 'other'")
+
+    # Loop through all pieces to find the knights of the given color
+    for square in board.pieces(attacker_piece, color):
+        if board.is_pinned(color, square):
+            # Skip if the knight is pinned
+            continue
+
+        attacks = board.attacks(square)
+        high_value_targets = 0
+
+        # Check each attack square to see if it's occupied by a high-value enemy piece
+        for attack_square in attacks:
+            attacked_piece = board.piece_at(attack_square)
+            if attacked_piece and attacked_piece.color != color:
+                if attacked_piece.piece_type in target_pieces:
+                    high_value_targets += 1
+        
+        # Check if the knight is attacking at least two high-value pieces
+        if high_value_targets >= 2:
+            return True
+
+    return False
+
+def is_pawn_pinned_to_own_king(board, perspective):
+    king_square = board.king(board.turn)
+    pinned_pawn = False
+
+    for square in chess.SQUARES:
+        if board.is_pinned(board.turn, square):
+            piece = board.piece_at(square)
+            if piece is not None and piece.piece_type == chess.PAWN and board.color_at(square) == board.turn:
+                if perspective == "mine":
+                    if king_square in board.attacks(square):
+                        pinned_pawn = True
+                else:
+                    if king_square in board.attacks(square):
+                        pinned_pawn = True
+
+    return pinned_pawn
+
+#%%
+# test_evaluator_func(
+#     dataset['train'], 
+#     check_fork, 
+#     kwargs={'perspective': 'mine', 
+#             'attacker_piece': chess.ROOK, 
+#             'target_pieces': [chess.QUEEN, chess.KING]}, 
+#     verbose=False
+# )
+test_evaluator_func(
+    dataset['train'], 
+    is_pawn_pinned_to_own_king, 
+    kwargs={'perspective': 'mine'}, 
+    verbose=False
+)
+
+#%%
 board_evaluation_functions = {
     'color': board_to_color,
     'is_check': board_to_check_int,
 }
+
+
 
 
 # Wrapper for the board evaluation functions
@@ -58,8 +171,8 @@ def game_evaluator(
             m = m.split(".")[1]
         try:
             board.push_san(m)
-            print(board)
-            print("-"*50)
+            # print(board)
+            # print("-"*50)
         except chess.InvalidMoveError:
             break
         
@@ -90,22 +203,17 @@ def create_boardstate_dataset(
     return eval_dataset
 
 
-if __name__ == "__main__":
+#%%
+import pandas as pd
 
-    dataset = datasets.load_dataset("adamkarvonen/chess_sae_individual_games_filtered")
+dataset_with_features = create_boardstate_dataset(
+    dataset['train'],
+    num_games=10, 
+    board_evaluation_functions=board_evaluation_functions, 
+    label_per_char=False,
+)
 
-    dataset_with_features = create_boardstate_dataset(
-        dataset['train'],
-        num_games=10, 
-        board_evaluation_functions=board_evaluation_functions, 
-        label_per_char=True,
-    )
+df = pd.DataFrame(dataset_with_features)
+df.head()
 
-    # Inspect result
-    res = dataset_with_features[-1]
-    inspect_keys = ['text'] + [name for name in res.keys() if isinstance(res[name], list)]
-
-    print(inspect_keys)
-    for i in range(len(res['move_number'])):
-        i_list = [res[name][i] for name in inspect_keys]
-        print(i_list)
+# %%
