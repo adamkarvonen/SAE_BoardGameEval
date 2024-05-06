@@ -39,6 +39,8 @@ PIECE_TO_ONE_HOT_MAPPING = {
 BLANK_INDEX = PIECE_TO_ONE_HOT_MAPPING[0]
 ONE_HOT_TO_PIECE_MAPPING = {value: key for key, value in PIECE_TO_ONE_HOT_MAPPING.items()}
 
+DEFAULT_DTYPE = torch.int8
+
 
 class PlayerColor(Enum):
     WHITE = "White"
@@ -48,7 +50,7 @@ class PlayerColor(Enum):
 def board_to_skill_state(board: chess.Board, skill: float) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array should tell what skill level the player is."""
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     state[0][0] = skill
 
     return state
@@ -69,7 +71,7 @@ def board_to_eval_state(board: chess.Board, skill: Optional[int] = None) -> torc
     in a lookup table. But, then we couldn't cleanly use this with the existing abstractions.
     To use this function, uncomment the import chess.engine through engine = above, and the internal code below.
     """
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
 
     # info = engine.analyse(board, chess.engine.Limit(time=0.01))
     # score = info["score"].white().score(mate_score=10000)
@@ -90,7 +92,7 @@ def board_to_piece_color_state(board: chess.Board, skill: Optional[int] = None) 
     The 8x8 array should tell if each square is black, white, or blank.
     White is 1, black is -1, and blank is 0.
     In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
     for i in range(64):
         piece = board.piece_at(i)
         if piece:
@@ -107,7 +109,7 @@ def board_to_piece_state(board: chess.Board, skill: Optional[int] = None) -> tor
     In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
 
     # Because state is initialized to all 0s, we only need to change the values of the pieces
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
     for i in range(64):
         piece = board.piece_at(i)
         if piece:
@@ -126,7 +128,7 @@ def board_to_threat_state(board: chess.Board, skill: Optional[int] = None) -> to
 
     ATTACKING_COLOR = chess.BLACK
     # Because state is initialized to all 0s, we only need to change the values of the pieces
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
     for i in range(64):
         if board.is_attacked_by(ATTACKING_COLOR, i):
             state[i // 8, i % 8] = 1
@@ -138,7 +140,7 @@ def board_to_check_state(board: chess.Board, skill: Optional[int] = None) -> tor
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array should tell if the current player is in check.
     1 = In check, 0 = Not in check."""
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     state[0][0] = 1 if board.is_check() else 0
 
     return state
@@ -148,7 +150,7 @@ def board_to_pin_state(board: chess.Board, skill: Optional[int] = None) -> torch
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array indicates if there are any pins on the board (1 = yes, 0 = no)."""
 
-    state = torch.zeros((1, 1), dtype=torch.int)
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
 
     for color in [chess.WHITE, chess.BLACK]:
         for i in range(64):
@@ -166,7 +168,7 @@ def board_to_prev_state(board: chess.Board, skill: Optional[int] = None) -> torc
     The 8x8 array should tell what piece is on each square at a previous board state."""
 
     PREVIOUS_TURNS = 25
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
     # If we cannot roll back PREVIOUS_TURNS, return a blank state
     # Predicting blank states is trivial, so be careful and change pos_start to not index into the blank states
@@ -198,7 +200,7 @@ def board_to_legal_moves_state(board: chess.Board, skill: Optional[int] = None) 
     """
     MOVING_COLOR = chess.WHITE
     # Initialize the state array with all zeros
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
     # Iterate through all legal moves for White
     for move in board.legal_moves:
@@ -218,10 +220,10 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
     The purpose of this is to see if the linear probe can determine the next move of the GPT.
     To get next move instead of last move, we offset the state stack by 1 in linear_probe_forward_pass():
     resid_post = resid_post[:, :-1, :]
-    state_stack_one_hot = state_stack_one_hot[:, :, 1:, :, :, :]
+    state_stack_one_hot = state_stack_one_hot[:, 1:, :, :, :]
     """
 
-    state = torch.zeros((8, 8), dtype=torch.int)
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
     # If offset is 2, we are predicting the LLM's next move
     # If offset is 1, we are predicting the opponent's response to the LLM's next move
@@ -242,6 +244,100 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
     state[destination_square // 8, destination_square % 8] = piece_value
 
     return state
+
+
+@dataclass
+class Config:
+    min_val: int
+    max_val: int
+    custom_board_state_function: Callable
+    num_rows: int = 8
+    num_cols: int = 8
+
+
+piece_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_piece_state,
+)
+
+color_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=board_to_piece_color_state,
+)
+
+threat_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_threat_state,
+)
+
+legal_move_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_legal_moves_state,
+)
+
+prev_move_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_prev_state,
+)
+
+
+eval_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=board_to_eval_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+skill_config = Config(
+    min_val=-2,
+    max_val=20,
+    custom_board_state_function=board_to_skill_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+check_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_check_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+pin_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_pin_state,
+    num_rows=1,
+    num_cols=1,
+)
+
+all_configs = [
+    piece_config,
+    color_config,
+    threat_config,
+    legal_move_config,
+    prev_move_config,
+    eval_config,
+    skill_config,
+    check_config,
+    pin_config,
+]
+
+config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}
+
+
+def get_num_classes(config: Config) -> int:
+    num_classes = abs(config.min_val) + abs(config.max_val) + 1
+    if num_classes == 2:
+        num_classes = 1
+    return num_classes
 
 
 def state_stack_to_chess_board(state: torch.Tensor) -> chess.Board:
@@ -278,6 +374,7 @@ def pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess
     return board
 
 
+# TODO This should take a list of custom_board_to_state_fns
 def create_state_stack(
     moves_string: str,
     custom_board_to_state_fn: Callable[[chess.Board], torch.Tensor],
@@ -290,7 +387,7 @@ def create_state_stack(
     count = 1
 
     # Scan 1: Creates states, with length = number of moves in the game
-    initial_states.append(custom_board_to_state_fn(board, skill))
+    initial_states.append(custom_board_to_state_fn(board, skill).to(dtype=DEFAULT_DTYPE))
     # Apply each move to the board
     for move in moves_string.split():
         try:
@@ -301,7 +398,7 @@ def create_state_stack(
             else:
                 board.push_san(move)
 
-            initial_states.append(custom_board_to_state_fn(board, skill))
+            initial_states.append(custom_board_to_state_fn(board, skill).to(dtype=DEFAULT_DTYPE))
         except:
             # because all games are truncated to len 680, often the last move is partial and invalid
             # so we don't need to log this, as it will happen on most games
@@ -330,7 +427,7 @@ def create_state_stacks(
     moves_strings: list[str],
     custom_board_to_state_fn: Callable[[chess.Board], torch.Tensor],
     skill_array: Optional[torch.Tensor] = None,
-) -> Float[Tensor, "modes sample_size pgn_str_length rows cols"]:
+) -> Float[Tensor, "sample_size pgn_str_length rows cols"]:
     """Given a list of strings of PGN format moves, create a tensor of shape (len(moves_strings), 8, 8).
     custom_board_to_state is a function that takes a chess.Board object and returns a 8x8 torch.Tensor for
     board state, or 1x1 for centipawn advantage."""
@@ -346,25 +443,23 @@ def create_state_stacks(
 
     # Convert the list of tensors to a single tensor
     final_state_stack = torch.stack(state_stacks)
-    final_state_stack = final_state_stack.unsqueeze(0)  # Add a dimension for the modes
-    # Currently, there is just one mode and it isn't necessary. For now, I'm maintaining the dimension for future use.
     return final_state_stack
 
 
 def state_stack_to_one_hot(
-    num_modes: int,
-    num_rows: int,
-    num_cols: int,
-    min_val: int,
-    max_val: int,
+    config: Config,
     device: torch.device,
     state_stack: torch.Tensor,
-    user_mapping: Optional[dict[int, int]] = None,
-) -> Int[Tensor, "modes sample_size num_white_moves rows cols one_hot_range"]:
-    """Input shape: assert(state_stacks_all_chars.shape) == (modes, sample_size, game_length, rows, cols)
-    Output shape: assert(state_stacks_one_hot.shape) == (modes, sample_size, game_length, rows, cols, one_hot_range)
+    user_mapping: Optional[dict[int, int]] = None,  # Only used for skill mapping
+) -> Int[Tensor, "sample_size num_white_moves rows cols one_hot_range"]:
+    """Input shape: assert(state_stacks_all_chars.shape) == (sample_size, game_length, rows, cols)
+    Output shape: assert(state_stacks_one_hot.shape) == (sample_size, game_length, rows, cols, one_hot_range)
     """
-    range_size = max_val - min_val + 1
+    range_size = get_num_classes(config)
+
+    # This will return binary values as scalar, not one-hot
+    if range_size <= 2:
+        return state_stack.unsqueeze(-1)
 
     mapping = {}
     if user_mapping:
@@ -373,19 +468,18 @@ def state_stack_to_one_hot(
         max_val = max(mapping.values())
         range_size = max_val - min_val + 1
     else:
-        for val in range(min_val, max_val + 1):
-            mapping[val] = val - min_val
+        for val in range(config.min_val, config.max_val + 1):
+            mapping[val] = val - config.min_val
 
     # Initialize the one-hot tensor
     one_hot = torch.zeros(
-        state_stack.shape[0],  # num modes
-        state_stack.shape[1],  # num games
-        state_stack.shape[2],  # num moves
-        num_rows,
-        num_cols,
+        state_stack.shape[0],  # num games
+        state_stack.shape[1],  # num moves
+        config.num_rows,
+        config.num_cols,
         range_size,
         device=device,
-        dtype=torch.int,
+        dtype=DEFAULT_DTYPE,
     )
 
     for val in mapping:
@@ -395,8 +489,8 @@ def state_stack_to_one_hot(
 
 
 def one_hot_to_state_stack(one_hot: torch.Tensor, min_val: int) -> torch.Tensor:
-    """Input shape: assert(probe_out.shape) == (modes, sample_size, num_white_moves, rows, cols, one_hot_range)
-    Output shape: assert(state_stacks_probe_outputs.shape) == (modes, sample_size, num_white_moves, rows, cols)
+    """Input shape: assert(probe_out.shape) == (sample_size, num_white_moves, rows, cols, one_hot_range)
+    Output shape: assert(state_stacks_probe_outputs.shape) == (sample_size, num_white_moves, rows, cols)
     """
     indices = torch.argmax(one_hot, dim=-1)
     state_stack = indices + min_val
@@ -606,7 +700,7 @@ def find_custom_indices(
         len(lst) == shortest_length for lst in indices_series
     ), "Not all lists have the same length"
 
-    indices = torch.tensor(indices_series.apply(list).tolist(), dtype=torch.int)
+    indices = torch.tensor(indices_series.apply(list).tolist(), dtype=torch.int32)
     return indices
 
 
@@ -622,79 +716,6 @@ def decode_list(meta: dict, l: list[int]) -> str:
     return "".join([itos[i] for i in l])
 
 
-@dataclass
-class Config:
-    min_val: int
-    max_val: int
-    custom_board_state_function: callable
-    num_rows: int = 8
-    num_cols: int = 8
-
-
-piece_config = Config(
-    min_val=-6,
-    max_val=6,
-    custom_board_state_function=board_to_piece_state,
-)
-
-color_config = Config(
-    min_val=-1,
-    max_val=1,
-    custom_board_state_function=board_to_piece_color_state,
-)
-
-threat_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_threat_state,
-)
-
-legal_move_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_legal_moves_state,
-)
-
-prev_move_config = Config(
-    min_val=-6,
-    max_val=6,
-    custom_board_state_function=board_to_prev_state,
-)
-
-
-eval_config = Config(
-    min_val=-1,
-    max_val=1,
-    custom_board_state_function=board_to_eval_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-skill_config = Config(
-    min_val=-2,
-    max_val=20,
-    custom_board_state_function=board_to_skill_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-check_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_check_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-pin_config = Config(
-    min_val=0,
-    max_val=1,
-    custom_board_state_function=board_to_pin_state,
-    num_rows=1,
-    num_cols=1,
-)
-
-
 def chess_boards_to_state_stack(
     chess_boards: list[chess.Board],
     device: torch.device,
@@ -705,10 +726,8 @@ def chess_boards_to_state_stack(
 
     for board in chess_boards:
         state_stack = config.custom_board_state_function(board, skill)
-        state_stack = state_stack.view(1, 1, 1, config.num_rows, config.num_cols)
-        one_hot = state_stack_to_one_hot(
-            1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, state_stack
-        )
+        state_stack = state_stack.view(1, 1, config.num_rows, config.num_cols)
+        one_hot = state_stack_to_one_hot(config, device, state_stack)
         one_hot_list.append(one_hot)
     stacked_one_hot = torch.stack(one_hot_list, dim=0)
     return stacked_one_hot
@@ -724,10 +743,8 @@ def mask_initial_board_states(
     Otherwise the initial board state will dominate the common states."""
     initial_board = chess.Board()
     initial_state = config.custom_board_state_function(initial_board, skill)
-    initial_state = initial_state.view(1, 1, 1, config.num_rows, config.num_cols)
-    initial_one_hot = state_stack_to_one_hot(
-        1, config.num_rows, config.num_cols, config.min_val, config.max_val, device, initial_state
-    )
+    initial_state = initial_state.view(1, 1, config.num_rows, config.num_cols)
+    initial_one_hot = state_stack_to_one_hot(config, device, initial_state)
 
     mask = (initial_one_hot == 1) & (one_hot_list == 1)
     one_hot_list[mask] = 0
@@ -739,7 +756,7 @@ def get_averaged_states(
 ) -> Int[Tensor, "num_rows num_cols num_options"]:
     summed_one_hot = torch.sum(one_hot_stack, dim=0)
     averaged_one_hot = summed_one_hot / one_hot_stack.shape[0]
-    averaged_one_hot = averaged_one_hot.squeeze()
+    averaged_one_hot = averaged_one_hot
     return averaged_one_hot
 
 

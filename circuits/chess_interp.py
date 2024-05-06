@@ -2,10 +2,14 @@ from circuitsvis.activations import text_neuron_activations
 from einops import rearrange
 import torch
 from tqdm import tqdm
-import chess_utils
-from chess_utils import Config
-
 from pydantic import BaseModel
+from typing import Optional, Callable
+from nnsight import LanguageModel
+
+from circuits.dictionary_learning import AutoEncoder, ActivationBuffer
+import circuits.chess_utils as chess_utils
+from circuits.chess_utils import Config, get_num_classes
+from circuits.utils import collect_activations_batch, get_ae_bundle, AutoEncoderBundle
 
 
 class BoardResultsConfig(BaseModel):
@@ -36,17 +40,29 @@ def serialize_results(data):
         return data
 
 
+def initialize_feature_dictionary(per_dim_stats: dict) -> dict[int, list]:
+    feature_dict: dict[int, list[str]] = {}
+    for dim in per_dim_stats:
+        feature_dict[dim] = []
+    return feature_dict
+
+
+def merge_feature_dictionaries(
+    feature_dict: dict[int, list[dict]],
+    new_feature_dict: dict[int, list[dict]],
+) -> dict[int, list[dict]]:
+    for dim in new_feature_dict:
+        feature_dict[dim].extend(new_feature_dict[dim])
+    return feature_dict
+
+
 @torch.no_grad()
 def examine_dimension_chess(
-    model,
-    submodule,
-    buffer,
-    dictionary=None,
-    max_length=128,
-    n_inputs=512,
-    dims=torch.tensor([0]),
-    k=30,
-    batch_size=4,
+    ae_bundle: AutoEncoderBundle,
+    n_inputs: int,
+    dims: torch.Tensor,
+    k: int = 30,
+    batch_size: int = 4,
     processing_device=torch.device("cpu"),
 ):
     """I have made the following modifications:
@@ -66,34 +82,24 @@ def examine_dimension_chess(
     dim_count = dims.shape[0]
 
     # TODO Refactor activations to be shape (dim_count, top_k, max_length) to reduce memory usage
+    # Processing time slows down when using float16, using float32 for now
     activations = torch.zeros(
-        (dim_count, n_inputs, max_length), device=processing_device, dtype=torch.float32
+        (dim_count, n_inputs, ae_bundle.context_length),
+        device=processing_device,
+        dtype=torch.float32,
     )
-    tokens = torch.zeros((n_inputs, max_length), device=processing_device, dtype=torch.int64)
+    tokens = torch.zeros(
+        (n_inputs, ae_bundle.context_length), device=processing_device, dtype=torch.int64
+    )
 
     for i in tqdm(range(n_iters), total=n_iters, desc="Collecting activations"):
-        inputs = buffer.text_batch(batch_size=batch_size)
-        with model.trace(inputs, invoker_args=dict(max_length=max_length, truncation=True)):
-            cur_tokens = model.input[1][
-                "input_ids"
-            ].save()  # if you're getting errors, check here; might only work for pythia models
-            cur_activations = submodule.output
-            if type(cur_activations.shape) == tuple:
-                cur_activations = cur_activations[0]
-            if dictionary is not None:
-                cur_activations = dictionary.encode(cur_activations)
-            cur_activations = cur_activations[
-                :, :, dims
-            ].save()  # Shape: (batch_size, max_length, dim_count)
-        cur_activations = rearrange(
-            cur_activations.value, "b n d -> d b n"
-        )  # Shape: (dim_count, batch_size, max_length)
-        activations[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
-        tokens[i * batch_size : (i + 1) * batch_size, :] = cur_tokens.value
+        inputs = ae_bundle.buffer.text_batch(batch_size=batch_size)
 
-    activations = activations.to("cpu")
-    tokens = tokens.to("cpu")
-    decoded_tokens = [model.tokenizer.decode(tokens[i]) for i in range(tokens.shape[0])]
+        cur_activations, cur_tokens = collect_activations_batch(ae_bundle, inputs, dims)
+
+        activations[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
+        tokens[i * batch_size : (i + 1) * batch_size, :] = cur_tokens
+    decoded_tokens = [ae_bundle.model.tokenizer.decode(tokens[i]) for i in range(tokens.shape[0])]
 
     per_dim_stats = {}
     idxs_dict = {}
@@ -115,7 +121,7 @@ def examine_dimension_chess(
             idxs = idxs_dict[tok]
             token_mean_acts[tok] = individual_acts[idxs].mean().item()
         top_tokens = sorted(token_mean_acts.items(), key=lambda x: x[1], reverse=True)[:k]
-        top_tokens = [(model.tokenizer.decode(tok), act) for tok, act in top_tokens]
+        top_tokens = [(ae_bundle.model.tokenizer.decode(tok), act) for tok, act in top_tokens]
 
         flattened_acts = rearrange(individual_acts, "b n -> (b n)")
         topk_indices = torch.argsort(flattened_acts, dim=0, descending=True)[:k]
@@ -154,10 +160,14 @@ def syntax_analysis(
     minimum_number_of_activations: int,
     top_k: int,
     max_dims: int,
-    syntax_function: callable,
+    syntax_function: Callable,
+    feature_dict: Optional[dict[int, list[dict]]] = None,
     notebook_usage: bool = False,
     verbose: bool = False,
-) -> SyntaxResultsConfig:
+) -> tuple[SyntaxResultsConfig, dict[int, list[dict]]]:
+
+    if feature_dict is None:
+        feature_dict = initialize_feature_dictionary(per_dim_stats)
 
     results = SyntaxResultsConfig()
 
@@ -196,6 +206,11 @@ def syntax_analysis(
             results.syntax_match_idx_count += 1
             average_input_length = sum(len(pgn) for pgn in inputs[:top_k]) / len(inputs[:top_k])
             results.average_input_length += average_input_length
+            feature_info = {
+                "name": syntax_function.__name__,
+                "max_activation": activations[0][-1].item(),
+            }
+            feature_dict[dim].append(feature_info)
 
     if results.syntax_match_idx_count > 0:
         results.average_input_length /= results.syntax_match_idx_count
@@ -211,7 +226,7 @@ def syntax_analysis(
             f"The average length of inputs of pattern matching features was {results.average_input_length:.2f}"
         )
 
-    return results
+    return results, feature_dict
 
 
 def board_analysis(
@@ -221,10 +236,14 @@ def board_analysis(
     max_dims: int,
     threshold: float,
     configs: list[Config],
+    feature_dict: Optional[dict[int, list[dict]]] = None,
     device: str = "cpu",
     notebook_usage: bool = False,
     verbose: bool = False,
-) -> dict[str, BoardResultsConfig]:
+) -> tuple[dict[str, BoardResultsConfig], dict[int, list[dict]]]:
+
+    if feature_dict is None:
+        feature_dict = initialize_feature_dictionary(per_dim_stats)
 
     nonzero_count = 0
     dim_count = 0
@@ -233,8 +252,7 @@ def board_analysis(
 
     for config in configs:
         board_tracker = torch.zeros(config.num_rows, config.num_cols).tolist()
-        num_classes = abs(config.min_val) + abs(config.max_val) + 1
-        per_class_dict = {key: 0 for key in range(0, num_classes)}
+        per_class_dict = {key: 0 for key in range(0, get_num_classes(config))}
 
         results[config.custom_board_state_function.__name__] = BoardResultsConfig(
             per_class_dict=per_class_dict,
@@ -281,14 +299,30 @@ def board_analysis(
                     for pgn in inputs:
                         print(pgn)
 
-            if config.num_rows == 8:
+                common_board_state = torch.zeros(
+                    config.num_rows,
+                    config.num_cols,
+                    get_num_classes(config),
+                    device=device,
+                    dtype=torch.int8,
+                )
+
                 for idx in zip(*common_indices):
                     results[config_name].board_tracker[idx[0]][idx[1]] += 1
                     results[config_name].per_class_dict[idx[2].item()] += 1
                     results[config_name].average_matches_per_dim += 1
 
+                    common_board_state[idx[0], idx[1], idx[2]] = 1
                     if notebook_usage:
                         print(f"Dim: {dim}, Index: {idx}")
+
+                feature_info = {
+                    "name": config.custom_board_state_function.__name__,
+                    "max_activation": activations[0][-1].item(),
+                    "board_state": common_board_state,
+                }
+
+                feature_dict[dim].append(feature_info)
 
     for config in configs:
         config_name = config.custom_board_state_function.__name__
@@ -326,4 +360,4 @@ def board_analysis(
                 board_tracker = torch.tensor(board_tracker).flip(0)
                 print(board_tracker)  # torch.tensor has a cleaner printout
 
-    return results
+    return results, feature_dict

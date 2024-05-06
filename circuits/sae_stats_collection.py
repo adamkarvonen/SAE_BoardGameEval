@@ -14,6 +14,7 @@ from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogp
 from circuits.chess_interp import examine_dimension_chess
 import circuits.chess_utils as chess_utils
 import circuits.chess_interp as chess_interp
+from circuits.utils import get_feature, get_ae_bundle, AutoEncoderBundle
 
 
 def get_nested_folders(path: str) -> list[str]:
@@ -36,24 +37,6 @@ def get_nested_folders(path: str) -> list[str]:
     return folder_names
 
 
-@torch.no_grad()
-def get_feature(
-    activations,
-    ae: AutoEncoder,
-    device,
-) -> torch.Tensor:
-    try:
-        x = next(activations).to(device)
-    except StopIteration:
-        raise StopIteration(
-            "Not enough activations in buffer. Pass a buffer with a smaller batch size or more data."
-        )
-
-    x_hat, f = ae(x, output_features=True)
-
-    return f
-
-
 def get_ae_stats(
     autoencoder_path: str,
     max_dims: int,
@@ -65,73 +48,48 @@ def get_ae_stats(
     save_results: bool = False,
 ) -> tuple[dict, dict]:
 
-    autoencoder_model_path = f"{autoencoder_path}ae.pt"
-    autoencoder_config_path = f"{autoencoder_path}config.json"
-    ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
-
-    with open(autoencoder_config_path, "r") as f:
-        config = json.load(f)
-
-    context_length = config["buffer"]["ctx_len"]
-    layer = config["trainer"]["layer"]
-
-    tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
-    model = convert_nanogpt_model(
-        f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
-    )
-    model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
-
-    submodule = model.transformer.h[layer].mlp  # layer 1 MLP
-    activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
-    dictionary_size = config["trainer"]["dictionary_size"]
-
-    # chess_sae_test is 100MB of data, so no big deal to download it
     data = hf_dataset_to_generator("adamkarvonen/chess_sae_test", streaming=False)
-    buffer = ActivationBuffer(
-        data,
-        model,
-        submodule,
-        n_ctxs=512,
-        ctx_len=context_length,
-        refresh_batch_size=batch_size,
-        io="out",
-        d_submodule=activation_dim,
-        device=device,
-        out_batch_size=batch_size,
-    )
+    ae_bundle = get_ae_bundle(autoencoder_path, device, data, batch_size, model_path)
 
     total_inputs = 8000
     assert total_inputs % batch_size == 0
     num_iters = total_inputs // batch_size
 
     # TODO This should be refactored so features is just shape (dictionary_size,) to reduce memory usage
-    features = torch.zeros((total_inputs, dictionary_size), device=device)
+    features = torch.zeros((total_inputs, ae_bundle.dictionary_size), device=device)
     for i in range(num_iters):
-        feature = get_feature(buffer, ae, device)  # (batch_size, dictionary_size)
+        feature = get_feature(
+            ae_bundle.buffer, ae_bundle.ae, device
+        )  # (batch_size, dictionary_size)
         features[i * batch_size : (i + 1) * batch_size, :] = feature
 
     firing_rate_per_feature = (features != 0).float().sum(dim=0) / total_inputs
 
-    assert firing_rate_per_feature.shape[0] == dictionary_size
+    assert firing_rate_per_feature.shape[0] == ae_bundle.dictionary_size
 
     mask = (firing_rate_per_feature > 0) & (firing_rate_per_feature < 0.5)
     idx = torch.nonzero(mask, as_tuple=False).squeeze()
 
     per_dim_stats = examine_dimension_chess(
-        model,
-        submodule,
-        buffer,
-        dictionary=ae,
-        dims=idx[:max_dims],
+        ae_bundle,
         n_inputs=n_inputs,
+        dims=idx[:max_dims],
         k=top_k + 1,
         batch_size=25,
         processing_device=torch.device("cpu"),
     )
 
-    eval_results = evaluate(
-        ae, buffer, max_len=context_length, batch_size=batch_size, io="out", device=device
-    )
+    # TODO getting the eval_results is broken. I think it's because I switched to SAEs on the residual stream, not the mlp output
+    # The residual stream returns a tuple of parameters, not a single parameter. This is just a guess though.
+    # eval_results = evaluate(
+    #     ae_bundle.ae,
+    #     ae_bundle.buffer,
+    #     max_len=ae_bundle.context_length,
+    #     batch_size=batch_size,
+    #     io="out",
+    #     device=device,
+    # )
+    eval_results = {}
 
     if save_results:
         pickle.dump(per_dim_stats, open(f"{autoencoder_path}per_dim_stats.pkl", "wb"))
@@ -139,14 +97,16 @@ def get_ae_stats(
     return per_dim_stats, eval_results
 
 
-def compute_all_ae_stats(folder: str, save_results: bool = False):
+def compute_all_ae_stats(
+    folder: str,
+    n_inputs: int = 5000,
+    top_k: int = 30,
+    max_dims: int = 4000,
+    batch_size: int = 25,
+    save_results: bool = False,
+):
 
-    # TODO These should be passed as arguments or read from a config file
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    n_inputs = 5000
-    top_k = 30
-    max_dims = 4000
-    batch_size = 25
 
     syntax_metrics = [
         chess_utils.find_num_indices,
@@ -181,20 +141,26 @@ def compute_all_ae_stats(folder: str, save_results: bool = False):
         results["syntax"] = {}
         results["eval_results"] = eval_results
 
+        feature_dict = chess_interp.initialize_feature_dictionary(per_dim_stats)
+
         for metric in syntax_metrics:
             metric_name = metric.__name__
-            results["syntax"][metric_name] = chess_interp.syntax_analysis(
-                per_dim_stats, top_k, top_k, max_dims, metric
+            results["syntax"][metric_name], feature_dict = chess_interp.syntax_analysis(
+                per_dim_stats, top_k, top_k, max_dims, metric, feature_dict
             )
-        results["board"] = chess_interp.board_analysis(
-            per_dim_stats, top_k, top_k, max_dims, 0.99, board_metrics
+        results["board"], feature_dict = chess_interp.board_analysis(
+            per_dim_stats, top_k, top_k, max_dims, 0.99, board_metrics, feature_dict
         )
         total_results[folder] = results
+
+        with open(f"{folder}feature_dict.pkl", "wb") as f:
+            pickle.dump(feature_dict, f)
 
         print(f"Finished {folder}")
 
         del per_dim_stats
         del eval_results
+        del feature_dict
         gc.collect()
 
     total_results = chess_interp.serialize_results(total_results)
