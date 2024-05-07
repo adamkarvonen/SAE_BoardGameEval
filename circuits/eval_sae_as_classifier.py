@@ -143,7 +143,7 @@ def aggregate_batch_statistics(
     results: dict,
     custom_functions: list[Callable],
     activations_FBL: torch.Tensor,
-    thresholds_T111: torch.Tensor,
+    thresholds_TF11: torch.Tensor,
     batch_data: dict[str, torch.Tensor],
     f_start: int,
     f_end: int,
@@ -155,7 +155,7 @@ def aggregate_batch_statistics(
     If not, we add it to the off_tracker.
     We also keep track of how many activations are above and below the threshold (on_count and off_count, respectively)
     This is done in parallel to make it fast."""
-    active_indices_TFBL = activations_FBL > thresholds_T111
+    active_indices_TFBL = activations_FBL > thresholds_TF11
 
     active_counts_TF = einops.reduce(active_indices_TFBL, "T F B L -> T F", "sum")
     off_counts_TF = einops.reduce(~active_indices_TFBL, "T F B L -> T F", "sum")
@@ -172,7 +172,7 @@ def aggregate_batch_statistics(
             boards_BLRRC,
             "B L R1 R2 C -> T F B L R1 R2 C",
             F=f_batch_size,
-            T=len(thresholds_T111),
+            T=thresholds_TF11.shape[0],
         )
 
         # TODO The next 2 operations consume almost all of the compute. I don't think it will work,
@@ -271,13 +271,12 @@ def aggregate_statistics(
     # We round up to ensure we don't ignore the remainder of features
     num_feature_iters = math.ceil(num_features / feature_batch_size)
 
-    thresholds_T111 = (
-        torch.arange(0.0, 4.1, 0.5).view(-1, 1, 1, 1).to(device)
-    )  # Reshape for broadcasting
+    thresholds_T = torch.arange(0.0, 1.1, 0.1).to(device)
+    thresholds_TF11 = einops.repeat(thresholds_T, "T -> T F 1 1", F=num_features)
+    max_activations_1F11 = einops.repeat(max_activations_F, "F -> 1 F 1 1")
+    thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
-    results = initialize_results_dict(
-        custom_functions, len(thresholds_T111), alive_features_F, device
-    )
+    results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_F, device)
 
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
@@ -306,7 +305,7 @@ def aggregate_statistics(
                 results,
                 custom_functions,
                 activations_FBL,
-                thresholds_T111,
+                thresholds_TF11,
                 batch_data,
                 f_start,
                 f_end,
@@ -317,7 +316,7 @@ def aggregate_statistics(
     hyperparameters = {
         "n_inputs": n_inputs,
         "context_length": ae_bundle.context_length,
-        "thresholds": thresholds_T111,
+        "thresholds": thresholds_TF11,
     }
     results["hyperparameters"] = hyperparameters
 
