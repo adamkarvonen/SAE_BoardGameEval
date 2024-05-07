@@ -17,3 +17,5 @@ analysis/*/
 
 models/*
 !models/meta.pkl
+
+data.pkl
