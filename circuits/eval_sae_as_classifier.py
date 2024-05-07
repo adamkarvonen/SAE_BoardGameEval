@@ -305,7 +305,7 @@ def aggregate_statistics(
                 results,
                 custom_functions,
                 activations_FBL,
-                thresholds_TF11,
+                thresholds_TF11[:, f_start:f_end, :, :],
                 batch_data,
                 f_start,
                 f_end,
