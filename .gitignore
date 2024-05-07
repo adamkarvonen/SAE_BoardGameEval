@@ -9,5 +9,11 @@ autoencoders/*
 !autoencoders/README.md
 !autoencoders/utils/
 
+# Ignore all directories under analysis/
+analysis/*/
+
+# But include all files directly under analysis/
+!analysis/*.*
+
 models/*
 !models/meta.pkl
