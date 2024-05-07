@@ -80,13 +80,30 @@ def get_above_below_counts(
     return above_counts_T, above_counts_TF
 
 
-def mask_initial_board_state(on_tracker: torch.Tensor, device: torch.device) -> torch.Tensor:
+def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tensor:
+    new_board = torch.zeros(board.shape[:-1] + (7,), dtype=board.dtype, device=board.device)
+
+    for i in range(7):
+        if i == 6:
+            new_board[..., i] = board[..., 6]
+        else:
+            new_board[..., i] = board[..., i] + board[..., 12 - i]
+    return new_board
+
+
+def mask_initial_board_state(
+    on_tracker: torch.Tensor, device: torch.device, mine_state: bool = False
+) -> torch.Tensor:
     initial_board = chess.Board()
     initial_state = chess_utils.board_to_piece_state(initial_board)
     initial_state = initial_state.view(1, 1, 8, 8)
     initial_one_hot = chess_utils.state_stack_to_one_hot(
         chess_utils.piece_config, device, initial_state
     ).squeeze()
+
+    if mine_state:
+        initial_one_hot = transform_board_from_piece_color_to_piece(initial_one_hot)
+
     mask = initial_one_hot == 1
     on_tracker[:, :, mask] = 0
 
@@ -100,6 +117,7 @@ def analyze_board_tracker(
     device: torch.device,
     high_threshold: float,
     significance_threshold: int,
+    mine_state: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Prepare the board tracker for analysis."""
     normalized_key = key + "_normalized"
@@ -110,7 +128,7 @@ def analyze_board_tracker(
     piece_state_on = results[function][key].clone()
     original_shape = piece_state_on.shape
 
-    piece_state_on = mask_initial_board_state(piece_state_on, device)
+    piece_state_on = mask_initial_board_state(piece_state_on, device, mine_state)
 
     # Optionally, we also mask off the blank class
     piece_state_on[:, :, :, :, 6] = 0
@@ -141,7 +159,9 @@ def analyze_board_tracker(
 
 if __name__ == "__main__":
     folder_name = "layer5_large_sweep_results2/"
+    folder_name = "layer0_results/"
     file_names = get_all_file_names(folder_name)
+    device = torch.device("cpu")
 
     high_threshold = 0.95
     significance_threshold = 10
@@ -157,14 +177,14 @@ if __name__ == "__main__":
             results,
             "on",
             [chess_utils.board_to_pin_state, chess_utils.board_to_piece_state],
-            torch.device("cpu"),
+            device,
         )
 
         results = normalize_tracker(
             results,
             "off",
             [chess_utils.board_to_pin_state, chess_utils.board_to_piece_state],
-            torch.device("cpu"),
+            device,
         )
 
         above_counts_T, above_counts_TF = get_above_below_counts(
@@ -179,7 +199,7 @@ if __name__ == "__main__":
             results,
             "board_to_piece_state",
             "on",
-            torch.device("cpu"),
+            device,
             high_threshold,
             significance_threshold,
         )
@@ -191,3 +211,25 @@ if __name__ == "__main__":
         print(piece_state_above_counts_T)
         print(summary_board)
         print(class_dict)
+
+        # results["board_to_piece_state"]["on_piece"] = transform_board_from_piece_color_to_piece(
+        #     results["board_to_piece_state"]["on"]
+        # )
+        # results["on_piece_count"] = results["on_count"]
+        # results = normalize_tracker(results, "on_piece", [chess_utils.board_to_piece_state], device)
+
+        # mine_state_above_counts_T, mine_summary_board, mine_class_dict = analyze_board_tracker(
+        #     results,
+        #     "board_to_piece_state",
+        #     "on_piece",
+        #     device,
+        #     high_threshold,
+        #     significance_threshold,
+        #     mine_state=True,
+        # )
+
+        # print()
+        # print("Piece state (mine):")
+        # print(mine_state_above_counts_T)
+        # print(mine_summary_board)
+        # print(mine_class_dict)
