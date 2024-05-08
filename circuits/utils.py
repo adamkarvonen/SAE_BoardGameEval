@@ -14,6 +14,7 @@ from transformer_lens import HookedTransformer
 
 from circuits.othello_buffer import OthelloActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
+from circuits.chess_utils import encode_string
 
 
 @dataclass
@@ -27,7 +28,7 @@ class AutoEncoderBundle:
     submodule: Any
 
 
-def get_model(model_name: str, device: torch.device, model_path: str = "models/") -> NNsight:
+def get_model(model_name: str, device: torch.device) -> NNsight:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         tf_model = HookedTransformer.from_pretrained("Baidicoot/Othello-GPT-Transformer-Lens")
         model = NNsight(tf_model).to(device)
@@ -231,3 +232,27 @@ def to_cpu(data):
     else:
         # If it's neither, return it as is
         return data
+
+
+def othello_hf_dataset_to_generator(
+    dataset_name: str, context_length: int = 59, split="train", streaming=True
+):
+    dataset = load_dataset(dataset_name, split=split, streaming=streaming)
+
+    def gen():
+        for x in iter(dataset):
+            yield x["tokens"][:context_length]
+
+    return gen()
+
+
+def chess_hf_dataset_to_generator(
+    dataset_name: str, meta: dict, context_length: int = 256, split="train", streaming=True
+):
+    dataset = load_dataset(dataset_name, split=split, streaming=streaming)
+
+    def gen():
+        for x in iter(dataset):
+            yield encode_string(meta, x["text"][:context_length])
+
+    return gen()
