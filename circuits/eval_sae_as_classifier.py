@@ -222,6 +222,43 @@ def normalize_tracker(
     return results
 
 
+# TODO Write a unit test for this function
+def apply_indexing_function(
+    pgn_strings: list[str],
+    activations_FBL,
+    batch_data: dict[str, torch.Tensor],
+    device: torch.device,
+) -> tuple[torch.Tensor, dict]:
+    """I'm using `I` in my shape annotation indicating indices.
+    If L (seq_len) == 256, there will be around 20 dots indices."""
+
+    max_indices = 20
+
+    custom_indices = []
+    for pgn in pgn_strings:
+        dots_indices = chess_utils.find_dots_indices(pgn)
+        custom_indices.append(dots_indices[:max_indices])
+
+    custom_indices_BI = torch.tensor(custom_indices).to(device)
+    custom_indices_FBI = einops.repeat(
+        custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
+    )
+
+    activations_FBI = torch.gather(activations_FBL, 2, custom_indices_FBI)
+
+    for custom_function in batch_data:
+        boards_BLRRC = batch_data[custom_function]
+        rows = boards_BLRRC.shape[2]
+        classes = boards_BLRRC.shape[4]
+        custom_indices_BIRRC = einops.repeat(
+            custom_indices_BI, "B I -> B I R1 R2 C", R1=rows, R2=rows, C=classes
+        )
+        boards_BIRRC = torch.gather(boards_BLRRC, 1, custom_indices_BIRRC)
+        batch_data[custom_function] = boards_BIRRC
+
+    return activations_FBI, batch_data
+
+
 def aggregate_statistics(
     custom_functions: list[Callable],
     autoencoder_path: str,
@@ -230,6 +267,7 @@ def aggregate_statistics(
     device: torch.device,
     model_path: str,
     data_path: str,
+    use_indexing: bool = False,
 ):
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py."""
@@ -291,6 +329,12 @@ def aggregate_statistics(
             ae_bundle, inputs_BL, alive_features_F
         )
 
+        if use_indexing:
+            all_activations_FBL, batch_data = apply_indexing_function(
+                pgn_strings[start:end], all_activations_FBL, batch_data, device
+            )
+            for custom_function in batch_data:
+                print(custom_function, batch_data[custom_function].shape)
         # For thousands of features, this would be many GB of memory. So, we minibatch.
         for feature in range(num_feature_iters):
             f_start = feature * feature_batch_size
@@ -355,5 +399,11 @@ if __name__ == "__main__":
     for autoencoder_path in folders:
         print("Evaluating autoencoder:", autoencoder_path)
         aggregate_statistics(
-            custom_functions, autoencoder_path, n_inputs, batch_size, device, model_path, data_path
+            custom_functions,
+            autoencoder_path,
+            n_inputs,
+            batch_size,
+            device,
+            model_path,
+            data_path,
         )
