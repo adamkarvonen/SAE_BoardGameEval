@@ -10,6 +10,8 @@ from torch import Tensor
 from enum import Enum
 import re
 
+import circuits.othello_utils as othello_utils
+
 # Mapping of chess pieces to integers
 PIECE_TO_INT = {
     chess.PAWN: 1,
@@ -318,6 +320,15 @@ pin_config = Config(
     num_cols=1,
 )
 
+# Kind of janky... TODO
+othello_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_BLRRC,
+    num_rows=8,
+    num_cols=8,
+)
+
 all_configs = [
     piece_config,
     color_config,
@@ -328,6 +339,7 @@ all_configs = [
     skill_config,
     check_config,
     pin_config,
+    othello_config,
 ]
 
 config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}

@@ -171,13 +171,12 @@ def get_data_batch(
     And memory usage is low, so it makes sense to compute the state stack once and store it."""
     batch_data = {}
     for custom_function in custom_functions:
+        config = chess_utils.config_lookup[custom_function.__name__]
         if custom_function.__name__ in othello_utils.othello_functions:
-            games = data[custom_function.__name__][start:end]
             batch_data[custom_function.__name__] = othello_utils.games_batch_to_state_stack_BLRRC(
-                games
+                inputs_BL
             ).to(device)
         else:
-            config = chess_utils.config_lookup[custom_function.__name__]
             if config.num_rows == 8:
                 state_stacks = chess_utils.create_state_stacks(inputs_BL, custom_function).to(
                     device
@@ -440,11 +439,8 @@ def aggregate_statistics(
 
 
 if __name__ == "__main__":
-    custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
 
-    autoencoder_group_path = "autoencoders/group1/"
-
-    folders = get_nested_folders(autoencoder_group_path)
+    othello = True
 
     # At these settings, it uses around 3GB of VRAM
     # VRAM does not scale with n_inputs, only batch_size
@@ -455,15 +451,25 @@ if __name__ == "__main__":
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
-    model_name = "adamkarvonen/8LayerChessGPT2"
     data_path = "data.pkl"
 
     print("Constructing evaluation dataset...")
 
-    construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
+    if not othello:
+        autoencoder_group_path = "autoencoders/group1/"
+        model_name = "adamkarvonen/8LayerChessGPT2"
+        custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
+        construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
+
+    else:
+        autoencoder_group_path = "autoencoders/othello_layer5_ef4/"
+        model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+        custom_functions = [othello_utils.games_batch_to_state_stack_BLRRC]
+        construct_othello_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
     print("Starting evaluation...")
 
+    folders = get_nested_folders(autoencoder_group_path)
     for autoencoder_path in folders:
         print("Evaluating autoencoder:", autoencoder_path)
         aggregate_statistics(
@@ -476,4 +482,5 @@ if __name__ == "__main__":
             model_name,
             data_path,
             indexing_function=None,
+            othello=othello,
         )

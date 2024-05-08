@@ -31,8 +31,8 @@ def games_batch_to_state_stack_BLRRC(batch_str_moves):
     """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
     game_stack = []
     for game in batch_str_moves:
-        if isinstance(str_moves, t.Tensor):
-            str_moves = str_moves.flatten()
+        if isinstance(game, t.Tensor):
+            game = game.flatten()
 
         board = OthelloBoardState()
         states = []
