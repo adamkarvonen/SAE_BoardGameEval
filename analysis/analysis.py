@@ -6,6 +6,7 @@ import chess
 import os
 
 import circuits.chess_utils as chess_utils
+import circuits.othello_utils as othello_utils
 from circuits.utils import to_cpu
 from circuits.eval_sae_as_classifier import normalize_tracker
 
@@ -120,6 +121,12 @@ def analyze_board_tracker(
     mine_state: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Prepare the board tracker for analysis."""
+
+    othello = False
+
+    if function in othello_utils.othello_functions:
+        othello = True
+
     normalized_key = key + "_normalized"
 
     num_thresholds = results[function][normalized_key].shape[0]
@@ -128,10 +135,13 @@ def analyze_board_tracker(
     piece_state_on = results[function][key].clone()
     original_shape = piece_state_on.shape
 
-    piece_state_on = mask_initial_board_state(piece_state_on, device, mine_state)
-
-    # Optionally, we also mask off the blank class
-    piece_state_on[:, :, :, :, 6] = 0
+    if not othello:
+        piece_state_on = mask_initial_board_state(piece_state_on, device, mine_state)
+        # Optionally, we also mask off the blank class
+        piece_state_on[:, :, :, :, 6] = 0
+    else:
+        # Optionally, we also mask off the blank class
+        piece_state_on[:, :, :, :, 1] = 0
 
     # Flatten the tensor to a 2D shape for compatibility with get_above_below_counts()
     piece_state_on = piece_state_on.view(num_thresholds, -1)
@@ -159,12 +169,17 @@ def analyze_board_tracker(
 
 if __name__ == "__main__":
     folder_name = "layer5_large_sweep_results2/"
-    folder_name = "layer0_results/"
+    # folder_name = "layer0_results/"
+    # folder_name = "layer5_indexing_results/"
+    folder_name = "layer5_large_sweep_indexing_results/"
+    # folder_name = "group1_results/"
+    folder_name = "before_after_compare/"
+    folder_name = "othello_results/"
     file_names = get_all_file_names(folder_name)
     device = torch.device("cpu")
 
     high_threshold = 0.95
-    significance_threshold = 10
+    significance_threshold = 20
 
     for file_name in file_names:
         print()
@@ -173,46 +188,59 @@ if __name__ == "__main__":
             results = pickle.load(file)
             results = to_cpu(results)
 
+        custom_functions = []
+
+        for key in results:
+            if key in chess_utils.config_lookup:
+                custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
+
         results = normalize_tracker(
             results,
             "on",
-            [chess_utils.board_to_pin_state, chess_utils.board_to_piece_state],
+            custom_functions,
             device,
         )
 
         results = normalize_tracker(
             results,
             "off",
-            [chess_utils.board_to_pin_state, chess_utils.board_to_piece_state],
+            custom_functions,
             device,
-        )
-
-        above_counts_T, above_counts_TF = get_above_below_counts(
-            results["board_to_pin_state"]["on_normalized"].squeeze().clone(),
-            results["board_to_pin_state"]["on"].squeeze().clone(),
-            0.00,
-            high_threshold,
-            significance_threshold=significance_threshold,
-        )
-
-        piece_state_above_counts_T, summary_board, class_dict = analyze_board_tracker(
-            results,
-            "board_to_piece_state",
-            "on",
-            device,
-            high_threshold,
-            significance_threshold,
         )
 
         print("Number of alive features:")
-        print(above_counts_TF.shape[1])
-        print("Pin state:")
-        print(above_counts_T)
-        print()
-        print("Piece state:")
-        print(piece_state_above_counts_T)
-        print(summary_board)
-        print(class_dict)
+        print(results["on_count"].shape[1])
+
+        for custom_function in custom_functions:
+            func_name = custom_function.__name__
+            config = chess_utils.config_lookup[func_name]
+            if config.num_rows == 8:
+                piece_state_above_counts_T, summary_board, class_dict = analyze_board_tracker(
+                    results,
+                    func_name,
+                    "on",
+                    device,
+                    high_threshold,
+                    significance_threshold,
+                )
+
+                print("Piece state:")
+                print(piece_state_above_counts_T)
+                print(summary_board)
+                print(class_dict)
+                print()
+            else:
+                above_counts_T, above_counts_TF = get_above_below_counts(
+                    results[func_name]["on_normalized"].squeeze().clone(),
+                    results[func_name]["on"].squeeze().clone(),
+                    0.00,
+                    high_threshold,
+                    significance_threshold=significance_threshold,
+                )
+
+                print("Pin state:")
+                print(above_counts_T)
+                print()
 
         # results["board_to_piece_state"]["on_piece"] = transform_board_from_piece_color_to_piece(
         #     results["board_to_piece_state"]["on"]
