@@ -13,7 +13,7 @@ from circuits.utils import (
     get_submodule,
 )
 
-DEVICE = torch.device("cuda")
+DEVICE = "cuda"
 
 layer = 5
 othello = False
