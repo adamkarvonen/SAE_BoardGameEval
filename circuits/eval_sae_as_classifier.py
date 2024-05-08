@@ -15,6 +15,8 @@ from circuits.utils import (
 )
 import circuits.chess_utils as chess_utils
 
+from IPython import embed
+
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
 # F  = features and minibatch size depending on the context (maybe this is stupid)
 # B = batch_size
@@ -329,7 +331,7 @@ def aggregate_statistics(
 if __name__ == "__main__":
     custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
 
-    autoencoder_group_path = "autoencoders/group1/"
+    autoencoder_group_path = "autoencoders/group-2024-05-07/"
 
     folders = get_nested_folders(autoencoder_group_path)
 
@@ -346,7 +348,7 @@ if __name__ == "__main__":
 
     print("Constructing evaluation dataset...")
 
-    construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
+    construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, max_str_length=256, device="cpu")
 
     print("Starting evaluation...")
 

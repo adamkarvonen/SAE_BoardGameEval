@@ -12,8 +12,14 @@ from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 
 from circuits.dictionary_learning import ActivationBuffer
-from circuits.dictionary_learning import AutoEncoder
+from circuits.dictionary_learning import AutoEncoder, GatedAutoEncoder
+from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
+from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
+from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.trainers.standard import StandardTrainer
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
+
+from IPython import embed
 
 
 @dataclass
@@ -37,13 +43,28 @@ def get_ae_bundle(
 ) -> AutoEncoderBundle:
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
-    ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
 
     with open(autoencoder_config_path, "r") as f:
         config = json.load(f)
 
+    # rangell: this is a super hacky way to get the correct dictionary class from the config
+    # TODO (rangell): make this better in the future.
+    config_args = []
+    for k, v in config["trainer"].items():
+        if k not in ["trainer_class", "sparsity_penalty"]:
+            if isinstance(v, str) and k != "dict_class":
+                config_args.append(k + "=" + "\'" + v + "\'")
+            else:
+                config_args.append(k + "=" + str(v))
+    config_str = ", ".join(config_args)
+    ae = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__.from_pretrained(
+        autoencoder_model_path, device=device)
+    #ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
+
     context_length = config["buffer"]["ctx_len"]
-    layer = config["trainer"]["layer"]
+    #layer = config["trainer"]["layer"]
+    layer = 5
+    print(f"WARNING: using manual setting of layer to {layer}")
 
     tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
     model = convert_nanogpt_model(
@@ -54,8 +75,10 @@ def get_ae_bundle(
     model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
 
     submodule = model.transformer.h[layer]  # residual stream after the layer
-    activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
-    dictionary_size = config["trainer"]["dictionary_size"]
+
+    activation_dim = ae.activation_dim
+    dictionary_size = ae.dict_size
+
 
     buffer = ActivationBuffer(
         data,
