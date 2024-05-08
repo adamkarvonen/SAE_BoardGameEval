@@ -129,10 +129,12 @@ def get_data_batch(
     for custom_function in custom_functions:
         config = chess_utils.config_lookup[custom_function.__name__]
         if config.num_rows == 8:
-            state_stacks = chess_utils.create_state_stacks(inputs_BL, custom_function).to(device)
-            batch_data[custom_function.__name__] = chess_utils.state_stack_to_one_hot(
-                config, device, state_stacks
+            state_stacks_BLRR = chess_utils.create_state_stacks(inputs_BL, custom_function).to(
+                device
             )
+            batch_data[custom_function.__name__] = chess_utils.state_stack_to_one_hot(
+                config, device, state_stacks_BLRR
+            )  # B L R R C
         else:
             batch_data[custom_function.__name__] = data[custom_function.__name__][start:end]
 
