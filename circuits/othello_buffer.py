@@ -1,6 +1,7 @@
 import torch as t
 from nnsight import LanguageModel
-from .config import DEBUG
+
+DEBUG = False
 
 if DEBUG:
     tracer_kwargs = {"scan": True, "validate": True}
@@ -92,6 +93,17 @@ class ActivationBuffer:
             texts, return_tensors="pt", max_length=self.ctx_len, padding=True, truncation=True
         )
 
+    def token_batch(self, batch_size=None):
+        """
+        Return a list of text
+        """
+        if batch_size is None:
+            batch_size = self.refresh_batch_size
+        try:
+            return t.tensor([next(self.data) for _ in range(batch_size)], device=self.device)
+        except StopIteration:
+            raise StopIteration("End of data stream reached")
+
     def refresh(self):
         self.activations = self.activations[~self.read]
 
@@ -99,20 +111,19 @@ class ActivationBuffer:
 
             with t.no_grad():
                 with self.model.trace(
-                    self.text_batch(),
+                    self.token_batch(),
                     **tracer_kwargs,
-                    invoker_args={"truncation": True, "max_length": self.ctx_len}
+                    invoker_args={"truncation": True, "max_length": self.ctx_len},
                 ):
                     if self.io == "in":
                         hidden_states = self.submodule.input[0].save()
                     else:
                         hidden_states = self.submodule.output.save()
-                    input = self.model.input.save()
-            attn_mask = input.value[1]["attention_mask"]
             hidden_states = hidden_states.value
             if isinstance(hidden_states, tuple):
                 hidden_states = hidden_states[0]
-            hidden_states = hidden_states[attn_mask != 0]
+            batch_size, seq_len, d_model = hidden_states.shape
+            hidden_states = hidden_states.view(batch_size * seq_len, d_model)
             self.activations = t.cat([self.activations, hidden_states.to(self.device)], dim=0)
             self.read = t.zeros(len(self.activations), dtype=t.bool, device=self.device)
 
