@@ -529,6 +529,12 @@ def find_spaces_indices(moves_string: str) -> list[int]:
     return indices
 
 
+def get_even_list_indices(tokens_list: list[int]) -> list[int]:
+    """"""
+    max_len = len(tokens_list)
+    return [i for i in range(max_len) if i % 2 == 0]
+
+
 def get_all_white_piece_prev_pos_indices(
     moves_string: str, board: chess.Board, move_san: chess.Move
 ) -> list[int]:
