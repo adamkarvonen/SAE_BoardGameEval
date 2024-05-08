@@ -34,7 +34,7 @@ buffer = ActivationBuffer(
     model,
     submodule,
     n_ctxs=8e3,
-    ctx_len=256,
+    ctx_len=59,
     refresh_batch_size=128,
     io="out",
     d_submodule=activation_dim,
