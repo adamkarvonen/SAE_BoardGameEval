@@ -46,11 +46,11 @@ def get_ae_bundle(
     layer = config["trainer"]["layer"]
 
     tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
-    model = convert_nanogpt_model(
-        f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
-    )
-    # I'm pretty sure this will work, but I haven't tested it
-    # model = GPT2LMHeadModel.from_pretrained("adamkarvonen/8LayerChessGPT2")
+    # Old method of loading model from nanogpt weights
+    # model = convert_nanogpt_model(
+    #     f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
+    # )
+    model = GPT2LMHeadModel.from_pretrained("adamkarvonen/8LayerChessGPT2")
     model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
 
     submodule = model.transformer.h[layer]  # residual stream after the layer

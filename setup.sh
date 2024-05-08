@@ -11,11 +11,6 @@ pip install -r requirements.txt
 pip install -e .
 git submodule update --init
 
-cd models
-wget -O lichess_8layers_ckpt_no_optimizer.pt "https://huggingface.co/adamkarvonen/chess_llms/resolve/main/lichess_8layers_ckpt_no_optimizer.pt?download=true"
-
-cd ..
-
 cd autoencoders
 
 wget -O group1.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group1.zip?download=true"
@@ -29,6 +24,8 @@ cd analysis
 wget -O group1_results.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group1_results.zip?download=true"
 unzip group1_results.zip
 rm group1_results.zip
+
+cd ..
 
 cd circuits
 cd dictionary_learning
