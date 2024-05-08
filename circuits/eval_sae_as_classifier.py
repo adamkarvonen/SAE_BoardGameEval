@@ -3,7 +3,7 @@ import pickle
 import torch
 import einops
 from datasets import load_dataset
-from typing import Callable
+from typing import Callable, Optional
 import math
 
 from circuits.utils import (
@@ -228,6 +228,7 @@ def apply_indexing_function(
     activations_FBL,
     batch_data: dict[str, torch.Tensor],
     device: torch.device,
+    indexing_function: Callable,
 ) -> tuple[torch.Tensor, dict]:
     """I'm using `I` in my shape annotation indicating indices.
     If L (seq_len) == 256, there will be around 20 dots indices."""
@@ -236,7 +237,7 @@ def apply_indexing_function(
 
     custom_indices = []
     for pgn in pgn_strings:
-        dots_indices = chess_utils.find_dots_indices(pgn)
+        dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
     custom_indices_BI = torch.tensor(custom_indices).to(device)
@@ -267,7 +268,7 @@ def aggregate_statistics(
     device: torch.device,
     model_path: str,
     data_path: str,
-    use_indexing: bool = False,
+    indexing_function: Optional[Callable] = None,
 ):
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py."""
@@ -329,9 +330,9 @@ def aggregate_statistics(
             ae_bundle, inputs_BL, alive_features_F
         )
 
-        if use_indexing:
+        if indexing_function is not None:
             all_activations_FBL, batch_data = apply_indexing_function(
-                pgn_strings[start:end], all_activations_FBL, batch_data, device
+                pgn_strings[start:end], all_activations_FBL, batch_data, device, indexing_function
             )
         # For thousands of features, this would be many GB of memory. So, we minibatch.
         for feature in range(num_feature_iters):
@@ -361,8 +362,10 @@ def aggregate_statistics(
         "n_inputs": n_inputs,
         "context_length": ae_bundle.context_length,
         "thresholds": thresholds_TF11,
-        "use_indexing": use_indexing,
+        "indexing_function": None,
     }
+    if indexing_function is not None:
+        hyperparameters["indexing_function"] = indexing_function.__name__
     results["hyperparameters"] = hyperparameters
 
     results = to_cpu(results)
@@ -405,5 +408,5 @@ if __name__ == "__main__":
             device,
             model_path,
             data_path,
-            use_indexing=False,
+            indexing_function=None,
         )
