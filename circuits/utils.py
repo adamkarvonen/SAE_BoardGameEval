@@ -74,7 +74,7 @@ def get_ae_bundle(
     context_length = config["buffer"]["ctx_len"]
     layer = config["trainer"]["layer"]
 
-    model = get_model(model_name, device, model_path)
+    model = get_model(model_name, device)
     submodule = get_submodule(model_name, layer, model)
 
     activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
