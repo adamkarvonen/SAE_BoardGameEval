@@ -12,9 +12,11 @@ from circuits.utils import (
     get_nested_folders,
     get_firing_features,
     to_cpu,
+    AutoEncoderBundle,
 )
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
+import circuits.othello_engine_utils as othello_engine_utils
 
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
 # F  = features and minibatch size depending on the context (maybe this is stupid)
@@ -39,19 +41,31 @@ def print_tensor_memory_usage(tensor):
 def construct_eval_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
+    models_path: str = "models/",
     output_path: str = "data.pkl",
     max_str_length: int = 256,
     device: str = "cpu",
 ):
     dataset = load_dataset("adamkarvonen/chess_sae_individual_games_filtered", streaming=False)
+
+    meta_path = models_path + "meta.pkl"
+
+    with open(meta_path, "rb") as f:
+        meta = pickle.load(f)
+
     pgn_strings = []
+    encoded_inputs = []
     for i, example in enumerate(dataset["train"]):
         if i >= n_inputs:
             break
-        pgn_strings.append(example["text"][:max_str_length])
+        pgn_string = example["text"][:max_str_length]
+        pgn_strings.append(pgn_string)
+        encoded_input = chess_utils.encode_string(meta, pgn_string)
+        encoded_inputs.append(encoded_input)
 
     data = {}
-    data["pgn_strings"] = pgn_strings
+    data["decoded_inputs"] = pgn_strings
+    data["encoded_inputs"] = encoded_inputs
 
     for function in custom_functions:
         func_name = function.__name__
@@ -72,6 +86,35 @@ def construct_eval_dataset(
         print_tensor_memory_usage(one_hot_BLRRC)
 
         data[func_name] = one_hot_BLRRC
+
+    with open(output_path, "wb") as f:
+        pickle.dump(data, f)
+
+    return data
+
+
+def construct_othello_dataset(
+    custom_functions: list[Callable],
+    n_inputs: int,
+    output_path: str = "data.pkl",
+    max_str_length: int = 59,
+    device: str = "cpu",
+):
+    """Because we are dealing with 8x8 state stacks, I won't bother creating any state stacks in advance."""
+    dataset = load_dataset("adamkarvonen/othello_45MB_games", streaming=False)
+    encoded_othello_inputs = []
+    decoded_othello_inputs = []
+    for i, example in enumerate(dataset["train"]):
+        if i >= n_inputs:
+            break
+        encoded_input = example["tokens"][:max_str_length]
+        decoded_input = othello_engine_utils.to_string(encoded_input)
+        encoded_othello_inputs.append(encoded_input)
+        decoded_othello_inputs.append(decoded_input)
+
+    data = {}
+    data["encoded_inputs"] = encoded_othello_inputs
+    data["decoded_inputs"] = decoded_othello_inputs
 
     with open(output_path, "wb") as f:
         pickle.dump(data, f)
@@ -266,6 +309,29 @@ def apply_indexing_function(
     return activations_FBI, batch_data
 
 
+def prep_firing_rate_data(
+    data: dict, device: torch.device, model_name: str, othello: bool = False
+) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
+    for key in data:
+        if key == "decoded_inputs" or key == "encoded_inputs":
+            continue
+        data[key] = data[key].to(device)
+
+    pgn_strings = data["decoded_inputs"]
+    encoded_inputs = data["encoded_inputs"]
+    del data["decoded_inputs"]
+    del data["encoded_inputs"]
+
+    firing_rate_data = iter(encoded_inputs)
+    n_ctxs = min(512, n_inputs)
+
+    ae_bundle = get_ae_bundle(
+        autoencoder_path, device, firing_rate_data, batch_size, model_path, model_name, n_ctxs
+    )
+
+    return data, ae_bundle, pgn_strings, encoded_inputs
+
+
 def aggregate_statistics(
     custom_functions: list[Callable],
     autoencoder_path: str,
@@ -273,8 +339,10 @@ def aggregate_statistics(
     batch_size: int,
     device: torch.device,
     model_path: str,
+    model_name: str,
     data_path: str,
     indexing_function: Optional[Callable] = None,
+    othello: bool = False,
 ):
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py."""
@@ -285,19 +353,8 @@ def aggregate_statistics(
     with open(data_path, "rb") as f:
         data = pickle.load(f)
 
-    for key in data:
-        if key == "pgn_strings":
-            continue
-        data[key] = data[key].to(device)
-
-    pgn_strings = data["pgn_strings"]
-    del data["pgn_strings"]
-
-    firing_rate_data = iter(pgn_strings)
-    n_ctxs = min(512, n_inputs)
-
-    ae_bundle = get_ae_bundle(
-        autoencoder_path, device, firing_rate_data, batch_size, model_path, n_ctxs
+    data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
+        data, device, model_name, othello
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
@@ -328,12 +385,14 @@ def aggregate_statistics(
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
-        inputs_BL = pgn_strings[start:end]
+        pgn_strings_BL = pgn_strings[start:end]
+        encoded_inputs_BL = encoded_inputs[start:end]
+        encoded_inputs_BL = torch.tensor(encoded_inputs_BL).to(device)
 
-        batch_data = get_data_batch(data, inputs_BL, start, end, custom_functions, device)
+        batch_data = get_data_batch(data, pgn_strings_BL, start, end, custom_functions, device)
 
-        all_activations_FBL, encoded_inputs = collect_activations_batch(
-            ae_bundle, inputs_BL, alive_features_F
+        all_activations_FBL, encoded_token_inputs = collect_activations_batch(
+            ae_bundle, encoded_inputs_BL, alive_features_F
         )
 
         if indexing_function is not None:
@@ -396,6 +455,7 @@ if __name__ == "__main__":
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
+    model_name = "adamkarvonen/8LayerChessGPT2"
     data_path = "data.pkl"
 
     print("Constructing evaluation dataset...")
@@ -413,6 +473,7 @@ if __name__ == "__main__":
             batch_size,
             device,
             model_path,
+            model_name,
             data_path,
             indexing_function=None,
         )

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import torch
-from nnsight import LanguageModel, NNsight
+from nnsight import NNsight
 import json
 from typing import Any
 from datasets import load_dataset
@@ -12,29 +12,25 @@ from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 from transformer_lens import HookedTransformer
 
-from circuits.dictionary_learning import ActivationBuffer
+from circuits.othello_buffer import OthelloActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
-from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 
 
 @dataclass
 class AutoEncoderBundle:
     ae: AutoEncoder
-    buffer: ActivationBuffer
-    model: LanguageModel
+    buffer: OthelloActivationBuffer
+    model: NNsight
     activation_dim: int
     dictionary_size: int
     context_length: int
     submodule: Any
 
 
-def get_model(
-    model_name: str, device: torch.device, model_path: str = "models/"
-) -> LanguageModel | NNsight:
+def get_model(model_name: str, device: torch.device, model_path: str = "models/") -> NNsight:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         tf_model = HookedTransformer.from_pretrained("Baidicoot/Othello-GPT-Transformer-Lens")
-        model = NNsight(tf_model)
-        model = model.to(device)
+        model = NNsight(tf_model).to(device)
         return model
 
     if model_name == "adamkarvonen/8LayerChessGPT2":
@@ -42,15 +38,15 @@ def get_model(
         # model = convert_nanogpt_model(
         #     f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
         # )
-        tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
+        # tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
         model = GPT2LMHeadModel.from_pretrained(model_name).to(device)
-        model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
+        model = NNsight(model).to(device)
         return model
 
     raise ValueError("Model not found.")
 
 
-def get_submodule(model_name: str, layer: int, model: NNsight | LanguageModel) -> Any:
+def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         return model.blocks[layer].hook_resid_post
     if model_name == "adamkarvonen/8LayerChessGPT2":
@@ -61,7 +57,7 @@ def get_submodule(model_name: str, layer: int, model: NNsight | LanguageModel) -
 def get_ae_bundle(
     autoencoder_path: str,
     device: torch.device,
-    data: Any,
+    data: Any,  # iter of list of ints
     batch_size: int,
     model_path: str = "models/",
     model_name: str = "adamkarvonen/8LayerChessGPT2",
@@ -83,7 +79,7 @@ def get_ae_bundle(
     activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
     dictionary_size = config["trainer"]["dictionary_size"]
 
-    buffer = ActivationBuffer(
+    buffer = OthelloActivationBuffer(
         data,
         model,
         submodule,
@@ -178,27 +174,25 @@ def get_firing_features(
 @torch.no_grad()
 def collect_activations_batch(
     ae_bundle: AutoEncoderBundle,
-    inputs: list[str],
+    inputs_BL: torch.Tensor,
     dims: Int[Tensor, "num_dims"],
 ) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
     with ae_bundle.model.trace(
-        inputs, invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
+        inputs_BL, invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
     ):
-        cur_tokens = ae_bundle.model.input[1][
-            "input_ids"
-        ].save()  # if you're getting errors, check here; might only work for pythia models
+        cur_tokens = ae_bundle.model.input[0].save()
         cur_activations = ae_bundle.submodule.output
         if type(cur_activations.shape) == tuple:
             cur_activations = cur_activations[0]
         cur_activations = ae_bundle.ae.encode(cur_activations)
-        cur_activations = cur_activations[
+        cur_activations_BLF = cur_activations[
             :, :, dims
         ].save()  # Shape: (batch_size, max_length, dim_count)
-    cur_activations = rearrange(
-        cur_activations.value, "b n d -> d b n"
+    cur_activations_FBL = rearrange(
+        cur_activations_BLF.value, "b n d -> d b n"
     )  # Shape: (dim_count, batch_size, max_length)
 
-    return cur_activations, cur_tokens.value
+    return cur_activations_FBL, cur_tokens.value[0]
 
 
 def get_nested_folders(path: str) -> list[str]:

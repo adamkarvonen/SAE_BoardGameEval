@@ -3,7 +3,7 @@ from transformer_lens import HookedTransformer
 import itertools
 from datasets import load_dataset
 
-from circuits.othello_buffer import ActivationBuffer
+from circuits.othello_buffer import OthelloActivationBuffer
 import dictionary_learning.training as training
 
 
@@ -29,7 +29,7 @@ def othello_hf_dataset_to_generator(dataset_name, split="train", streaming=True)
 
 
 data = othello_hf_dataset_to_generator("taufeeque/othellogpt")
-buffer = ActivationBuffer(
+buffer = OthelloActivationBuffer(
     data,
     model,
     submodule,

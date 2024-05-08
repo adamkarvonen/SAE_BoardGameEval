@@ -9,7 +9,7 @@ else:
     tracer_kwargs = {"scan": False, "validate": False}
 
 
-class ActivationBuffer:
+class OthelloActivationBuffer:
     """
     Implements a buffer of activations. The buffer stores activations from a model,
     yields them in batches, and refreshes them when the buffer is less than half full.
