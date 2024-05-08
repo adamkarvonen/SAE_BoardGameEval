@@ -1,31 +1,56 @@
-from nnsight import LanguageModel
 import torch
 import itertools
+import pickle
 
-from dictionary_learning import ActivationBuffer
+from circuits.othello_buffer import OthelloActivationBuffer
 from dictionary_learning.training import trainSAE
-from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
-from dictionary_learning.utils import hf_dataset_to_generator
 from dictionary_learning.trainers.standard import StandardTrainer
 
-DEVICE = "cuda"
+from circuits.utils import (
+    chess_hf_dataset_to_generator,
+    othello_hf_dataset_to_generator,
+    get_model,
+    get_submodule,
+)
 
-tokenizer = NanogptTokenizer("models/meta.pkl")
-model = convert_nanogpt_model("models/lichess_8layers_ckpt_no_optimizer.pt", torch.device(DEVICE))
-model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer).to(DEVICE)
+DEVICE = torch.device("cuda")
 
-submodule = model.transformer.h[5]
+layer = 5
+othello = False
+
+
+if not othello:
+    with open("models/meta.pkl", "rb") as f:
+        meta = pickle.load(f)
+
+    context_length = 256
+    model_name = "adamkarvonen/8LayerChessGPT2"
+    dataset_name = "adamkarvonen/chess_sae_text"
+    data = chess_hf_dataset_to_generator(
+        dataset_name, meta, context_length=context_length, split="train", streaming=True
+    )
+    model_type = "chess"
+else:
+    context_length = 59
+    model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+    dataset_name = "taufeeque/othellogpt"
+    data = othello_hf_dataset_to_generator(
+        dataset_name, context_length=context_length, split="train", streaming=True
+    )
+    model_type = "othello"
+
+model = get_model(model_name, DEVICE)
+submodule = get_submodule(model_name, layer, model)
+
 activation_dim = 512  # output dimension of the layer
 resample_steps = 50000
 
-
-data = hf_dataset_to_generator("adamkarvonen/chess_sae_text")
-buffer = ActivationBuffer(
+buffer = OthelloActivationBuffer(
     data,
     model,
     submodule,
     n_ctxs=8e3,
-    ctx_len=256,
+    ctx_len=context_length,
     refresh_batch_size=128,
     io="out",
     d_submodule=activation_dim,
@@ -56,6 +81,6 @@ trainSAE(
     trainer_configs=trainer_configs,
     steps=300000,
     save_steps=100000,
-    save_dir="",
+    save_dir=f"{model_type}_layer_{layer}",
     log_steps=1000,
 )
