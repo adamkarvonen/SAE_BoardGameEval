@@ -128,7 +128,7 @@ def get_data_batch(
     And memory usage is low, so it makes sense to compute the state stack once and store it."""
     batch_data = {}
     for custom_function in custom_functions:
-        if custom_function in othello_utils:
+        if custom_function.__name__ in othello_utils.othello_functions:
             games = data[custom_function.__name__][start:end]
             batch_data[custom_function.__name__] = othello_utils.games_batch_to_state_stack_BLRRC(
                 games
