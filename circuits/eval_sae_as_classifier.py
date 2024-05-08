@@ -14,6 +14,7 @@ from circuits.utils import (
     to_cpu,
 )
 import circuits.chess_utils as chess_utils
+import circuits.othello_utils as othello_utils
 
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
 # F  = features and minibatch size depending on the context (maybe this is stupid)
@@ -127,14 +128,18 @@ def get_data_batch(
     And memory usage is low, so it makes sense to compute the state stack once and store it."""
     batch_data = {}
     for custom_function in custom_functions:
-        config = chess_utils.config_lookup[custom_function.__name__]
-        if config.num_rows == 8:
-            state_stacks = chess_utils.create_state_stacks(inputs_BL, custom_function).to(device)
-            batch_data[custom_function.__name__] = chess_utils.state_stack_to_one_hot(
-                config, device, state_stacks
-            )
+        if custom_function in othello_utils:
+            games = data[custom_function.__name__][start:end]
+            batch_data[custom_function.__name__] = othello_utils.games_batch_to_state_stack_BLRRC(games).to(device)
         else:
-            batch_data[custom_function.__name__] = data[custom_function.__name__][start:end]
+            config = chess_utils.config_lookup[custom_function.__name__]
+            if config.num_rows == 8:
+                state_stacks = chess_utils.create_state_stacks(inputs_BL, custom_function).to(device)
+                batch_data[custom_function.__name__] = chess_utils.state_stack_to_one_hot(
+                    config, device, state_stacks
+                )
+            else:
+                batch_data[custom_function.__name__] = data[custom_function.__name__][start:end]
 
     return batch_data
 
