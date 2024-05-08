@@ -12,7 +12,11 @@ zstandard>=0.22.0
 pytest>=8.1.1
 transformers>=4.39.3
 wandb>=0.16.0
+# Chess specific requirements below
 python-chess==1.999
 pydantic==2.6.4
 jaxtyping==0.2.28
 beartype == 0.14.1
+
+# For OthelloGPT
+transformer_lens==1.15.0

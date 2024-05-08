@@ -204,6 +204,8 @@ if __name__ == "__main__":
             significance_threshold,
         )
 
+        print("Number of alive features:")
+        print(above_counts_TF.shape[1])
         print("Pin state:")
         print(above_counts_T)
         print()
