@@ -361,6 +361,7 @@ def aggregate_statistics(
         "n_inputs": n_inputs,
         "context_length": ae_bundle.context_length,
         "thresholds": thresholds_TF11,
+        "use_indexing": use_indexing,
     }
     results["hyperparameters"] = hyperparameters
 
@@ -404,4 +405,5 @@ if __name__ == "__main__":
             device,
             model_path,
             data_path,
+            use_indexing=False,
         )
