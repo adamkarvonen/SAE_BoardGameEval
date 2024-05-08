@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import torch
-from nnsight import LanguageModel
+from nnsight import LanguageModel, NNsight
 import json
 from typing import Any
 from datasets import load_dataset
@@ -10,6 +10,7 @@ from torch import Tensor
 import os
 from tqdm import tqdm
 from transformers import GPT2LMHeadModel
+from transformer_lens import HookedTransformer
 
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
@@ -27,12 +28,43 @@ class AutoEncoderBundle:
     submodule: Any
 
 
+def get_model(
+    model_name: str, device: torch.device, model_path: str = "models/"
+) -> LanguageModel | NNsight:
+    if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
+        tf_model = HookedTransformer.from_pretrained("Baidicoot/Othello-GPT-Transformer-Lens")
+        model = NNsight(tf_model)
+        model = model.to(device)
+        return model
+
+    if model_name == "adamkarvonen/8LayerChessGPT2":
+        # Old method of loading model from nanogpt weights
+        # model = convert_nanogpt_model(
+        #     f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
+        # )
+        tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
+        model = GPT2LMHeadModel.from_pretrained(model_name).to(device)
+        model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
+        return model
+
+    raise ValueError("Model not found.")
+
+
+def get_submodule(model_name: str, layer: int, model: NNsight | LanguageModel) -> Any:
+    if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
+        return model.blocks[layer].hook_resid_post
+    if model_name == "adamkarvonen/8LayerChessGPT2":
+        return model.transformer.h[layer]  # residual stream after the layer
+    raise ValueError("Model not found.")
+
+
 def get_ae_bundle(
     autoencoder_path: str,
     device: torch.device,
     data: Any,
     batch_size: int,
     model_path: str = "models/",
+    model_name: str = "adamkarvonen/8LayerChessGPT2",
     n_ctxs: int = 512,
 ) -> AutoEncoderBundle:
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
@@ -45,15 +77,9 @@ def get_ae_bundle(
     context_length = config["buffer"]["ctx_len"]
     layer = config["trainer"]["layer"]
 
-    tokenizer = NanogptTokenizer(meta_path=f"{model_path}meta.pkl")
-    # Old method of loading model from nanogpt weights
-    # model = convert_nanogpt_model(
-    #     f"{model_path}lichess_8layers_ckpt_no_optimizer.pt", torch.device(device)
-    # )
-    model = GPT2LMHeadModel.from_pretrained("adamkarvonen/8LayerChessGPT2")
-    model = LanguageModel(model, device_map=device, tokenizer=tokenizer).to(device)
+    model = get_model(model_name, device, model_path)
+    submodule = get_submodule(model_name, layer, model)
 
-    submodule = model.transformer.h[layer]  # residual stream after the layer
     activation_dim = config["trainer"]["activation_dim"]  # output dimension of the MLP
     dictionary_size = config["trainer"]["dictionary_size"]
 
