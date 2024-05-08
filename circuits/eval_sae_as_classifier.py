@@ -333,8 +333,6 @@ def aggregate_statistics(
             all_activations_FBL, batch_data = apply_indexing_function(
                 pgn_strings[start:end], all_activations_FBL, batch_data, device
             )
-            for custom_function in batch_data:
-                print(custom_function, batch_data[custom_function].shape)
         # For thousands of features, this would be many GB of memory. So, we minibatch.
         for feature in range(num_feature_iters):
             f_start = feature * feature_batch_size
