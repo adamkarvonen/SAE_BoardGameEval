@@ -289,7 +289,7 @@ if __name__ == "__main__":
                 print(summary_board)
                 print(class_dict)
                 print()
-                print("Classifier state (high precision and recall):")
+                print(f"{func_name} (high precision and recall):")
                 print(classifier_counts_T)
                 print(classifier_summary_board)
                 print(classifier_class_dict)
@@ -307,10 +307,10 @@ if __name__ == "__main__":
                     )
                 )
 
-                print("Pin state (high precision):")
+                print(f"{func_name} (high precision):")
                 print(above_counts_T)
                 print()
-                print("Classifier state (high precision and recall):")
+                print(f"{func_name} (high precision and recall):")
                 print(classifier_counts_T)
                 print()
 
