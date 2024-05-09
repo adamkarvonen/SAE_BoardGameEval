@@ -157,6 +157,28 @@ def get_summary_board(
     return summary_board_RR, class_dict_C, coverage_RR, coverage
 
 
+def get_timestep_counts(
+    above_counts_TFRRC: torch.Tensor,
+    piece_state_on_TFRRC: torch.Tensor,
+    piece_state_off_counting_TFRRC: torch.Tensor,
+):
+    timesteps_counts_T = einops.reduce(above_counts_TFRRC, "T F R1 R2 C -> T", "sum")
+    best_idx = torch.argmax(timesteps_counts_T)
+    total_counts_TFRRC = piece_state_on_TFRRC + piece_state_off_counting_TFRRC
+
+    class_counts_C = einops.reduce(total_counts_TFRRC[0][0], "R1 R2 C -> C", "sum")
+    class_counts_C2 = einops.reduce(total_counts_TFRRC[1][2], "R1 R2 C -> C", "sum")
+
+    assert torch.equal(class_counts_C, class_counts_C2)
+
+    print(f"Class counts: {class_counts_C}")
+
+    above_counts_FRRC = above_counts_TFRRC[best_idx, ...]
+    actual_class_counts_C = einops.reduce(above_counts_FRRC, "F R1 R2 C -> C", "sum")
+
+    print(f"Actual class counts: {actual_class_counts_C}")
+
+
 def analyze_board_tracker(
     results: dict,
     function: str,
@@ -200,21 +222,12 @@ def analyze_board_tracker(
         # Optionally, we also mask off the blank class
         piece_state_on_TFRRC[:, :, :, :, 1] = 0
 
-    total_counts_TFRRC = piece_state_on_TFRRC + piece_state_off_counting_TFRRC
-
-    class_counts_C = total_counts_TFRRC[0].sum(dim=(0, 1, 2))
-    class_counts_C2 = total_counts_TFRRC[1].sum(dim=(0, 1, 2))
-
-    assert torch.equal(class_counts_C, class_counts_C2)
-
-    print(f"Class counts: {class_counts_C}")
-
     (
         above_counts_T,
         above_counts_TFRRC_binary,
         above_counts_TFRRC,
         classifier_counts_T,
-        classifier_TFRRC_binary,
+        classifier_counts_TFRRC_binary,
         classifier_counts_TFRRC,
     ) = get_above_below_counts(
         piece_state_on_normalized,
@@ -226,6 +239,13 @@ def analyze_board_tracker(
         significance_threshold=significance_threshold,
     )
 
+    get_timestep_counts(above_counts_TFRRC, piece_state_on_TFRRC, piece_state_off_counting_TFRRC)
+    get_timestep_counts(
+        classifier_counts_TFRRC,
+        piece_state_on_TFRRC,
+        piece_state_off_counting_TFRRC,
+    )
+
     summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
         above_counts_T, above_counts_TFRRC_binary, original_shape
     )
@@ -235,7 +255,7 @@ def analyze_board_tracker(
         classifier_class_dict_C,
         classifier_coverage_RR,
         classifier_coverage,
-    ) = get_summary_board(classifier_counts_T, classifier_TFRRC_binary, original_shape)
+    ) = get_summary_board(classifier_counts_T, classifier_counts_TFRRC_binary, original_shape)
 
     # -1 because we mask off blank
     max_possible_coverage = (
@@ -278,7 +298,7 @@ if __name__ == "__main__":
 
     high_threshold = 0.95
     low_threshold = 0.1
-    significance_threshold = 100
+    significance_threshold = 10
 
     for file_name in file_names:
         print()
