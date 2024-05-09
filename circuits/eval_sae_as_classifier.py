@@ -173,9 +173,7 @@ def get_data_batch(
     for custom_function in custom_functions:
         config = chess_utils.config_lookup[custom_function.__name__]
         if custom_function.__name__ in othello_utils.othello_functions:
-            batch_data[custom_function.__name__] = othello_utils.games_batch_to_state_stack_BLRRC(
-                inputs_BL
-            ).to(device)
+            batch_data[custom_function.__name__] = custom_function(inputs_BL).to(device)
         else:
             if config.num_rows == 8:
                 state_stacks = chess_utils.create_state_stacks(inputs_BL, custom_function).to(
