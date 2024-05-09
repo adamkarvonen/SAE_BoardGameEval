@@ -5,6 +5,7 @@ import einops
 from datasets import load_dataset
 from typing import Callable, Optional
 import math
+import os
 
 from circuits.utils import (
     get_ae_bundle,
@@ -338,6 +339,7 @@ def aggregate_statistics(
     model_path: str,
     model_name: str,
     data_path: str,
+    output_path: str,
     indexing_function: Optional[Callable] = None,
     othello: bool = False,
 ):
@@ -431,7 +433,7 @@ def aggregate_statistics(
     results["hyperparameters"] = hyperparameters
 
     results = to_device(results, "cpu")
-    autoencoder_results_name = autoencoder_path.replace("/", "_") + "results.pkl"
+    autoencoder_results_name = output_path + autoencoder_path.replace("/", "_") + "results.pkl"
     with open(autoencoder_results_name, "wb") as f:
         pickle.dump(results, f)
 
@@ -467,6 +469,14 @@ if __name__ == "__main__":
 
     print("Starting evaluation...")
 
+    indexing_function = None
+    output_path = (
+        f"analysis/{autoencoder_group_path.replace('/','_')}_indexing_{indexing_function}_results/"
+    )
+
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+
     folders = get_nested_folders(autoencoder_group_path)
     for autoencoder_path in folders:
         print("Evaluating autoencoder:", autoencoder_path)
@@ -479,6 +489,7 @@ if __name__ == "__main__":
             model_path,
             model_name,
             data_path,
-            indexing_function=None,
+            output_path,
+            indexing_function=indexing_function,
             othello=othello,
         )
