@@ -221,6 +221,7 @@ def analyze_board_tracker(
     else:
         # Optionally, we also mask off the blank class
         piece_state_on_TFRRC[:, :, :, :, 1] = 0
+        piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
 
     (
         above_counts_T,
