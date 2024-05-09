@@ -6,6 +6,7 @@ from datasets import load_dataset
 from typing import Callable, Optional
 import math
 import os
+import itertools
 
 from circuits.utils import (
     get_ae_bundle,
@@ -453,43 +454,52 @@ if __name__ == "__main__":
     model_path = "models/"
     data_path = "data.pkl"
 
+    autoencoder_group_paths = ["autoencoders/group1/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
+    indexing_functions = [None, chess_utils.get_even_list_indices]
+
+    param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
+
     print("Constructing evaluation dataset...")
 
     if not othello:
-        autoencoder_group_path = "autoencoders/group1/"
         model_name = "adamkarvonen/8LayerChessGPT2"
         custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
         construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
     else:
-        autoencoder_group_path = "autoencoders/othello_layer5_ef4/"
         model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
-        custom_functions = [othello_utils.games_batch_to_state_stack_BLRRC]
+        custom_functions = [
+            othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
+            othello_utils.games_batch_to_state_stack_BLRRC,
+            othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
+        ]
         construct_othello_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
     print("Starting evaluation...")
 
-    indexing_function = None
-    output_path = (
-        f"analysis/{autoencoder_group_path.replace('/','_')}_indexing_{indexing_function}_results/"
-    )
+    for autoencoder_group_path, indexing_function in param_combinations:
+        print(f"Autoencoder group path: {autoencoder_group_path}")
+        print(f"Indexing function: {indexing_function}")
 
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+        output_path = f"analysis/{autoencoder_group_path.replace('/','_')}_indexing_{indexing_function}_results/"
 
-    folders = get_nested_folders(autoencoder_group_path)
-    for autoencoder_path in folders:
-        print("Evaluating autoencoder:", autoencoder_path)
-        aggregate_statistics(
-            custom_functions,
-            autoencoder_path,
-            n_inputs,
-            batch_size,
-            device,
-            model_path,
-            model_name,
-            data_path,
-            output_path,
-            indexing_function=indexing_function,
-            othello=othello,
-        )
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+        folders = get_nested_folders(autoencoder_group_path)
+        for autoencoder_path in folders:
+            print("Evaluating autoencoder:", autoencoder_path)
+            aggregate_statistics(
+                custom_functions,
+                autoencoder_path,
+                n_inputs,
+                batch_size,
+                device,
+                model_path,
+                model_name,
+                data_path,
+                output_path,
+                indexing_function=indexing_function,
+                othello=othello,
+            )
