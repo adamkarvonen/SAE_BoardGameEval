@@ -7,7 +7,7 @@ import os
 
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
-from circuits.utils import to_cpu
+from circuits.utils import to_device
 from circuits.eval_sae_as_classifier import normalize_tracker
 
 
@@ -186,7 +186,7 @@ if __name__ == "__main__":
         print(file_name)
         with open(folder_name + file_name, "rb") as file:
             results = pickle.load(file)
-            results = to_cpu(results)
+            results = to_device(results, device)
 
         custom_functions = []
 
