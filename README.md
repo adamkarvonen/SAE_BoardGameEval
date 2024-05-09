@@ -8,7 +8,7 @@ Once you have trained SAEs, drag the folder containing the SAEs into `autoencode
 
 Then, put all of the results files (which will be in the repo root at `chess-gpt-circuits/`) into a folder, and place that folder into `analysis/`. If you don't want to evaluate your own, `setup.sh` will download and unzip some of my results that I have on HuggingFace. You can place these, such as `group1_results/`, into `analysis/`. My SAEs and some saved eval results are here: https://huggingface.co/adamkarvonen/chess_saes
 
-Then, set `folder_name = "group1_results/"` to equal your folder name, change directory into `analysis/`, and run `python analysis.py`. It will display the results in the terminal.
+Then, at the bottom of `analysis.py` set `folder_name = "group1_results/"` to equal your folder name, change directory into `analysis/`, and run `python analysis.py`. It will display the results in the terminal.
 
 Note on `eval_sae_as_classifier.py`: there are "board states", such as `board_to_piece_state`, which contain the one hot state of the board at every character, or (832 elements = 8 rows x 8 cols x 13 possibilities per square). These run about 10x slower than higher level concepts such as `board_to_pin_state`, which only contain 1 element (binary value of is there a pin on the board).
 
