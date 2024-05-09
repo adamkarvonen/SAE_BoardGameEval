@@ -457,6 +457,7 @@ if __name__ == "__main__":
     autoencoder_group_paths = ["autoencoders/group1/"]
     autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
     indexing_functions = [None, chess_utils.get_even_list_indices]
+    indexing_functions = [None]  # I'm experimenting with these for Othello
 
     param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
 
