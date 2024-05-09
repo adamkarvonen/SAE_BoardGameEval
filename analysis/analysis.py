@@ -22,10 +22,10 @@ def get_all_file_names(folder_name: str) -> list[str]:
 
 # TODO Reshape everything to be TFRRC, that should be easier to understand
 def get_above_below_counts(
-    on_tracker_TF: torch.Tensor,
-    on_counts_TF: torch.Tensor,
-    off_tracker_TF: torch.Tensor,
-    off_counts_TF: torch.Tensor,
+    on_tracker_TFRRC: torch.Tensor,
+    on_counts_TFRRC: torch.Tensor,
+    off_tracker_TFRRC: torch.Tensor,
+    off_counts_TFRRC: torch.Tensor,
     low_threshold: float,
     high_threshold: float,
     significance_threshold: int = 10,
@@ -34,34 +34,34 @@ def get_above_below_counts(
     """Must be a 2D tensor matching shape annotation."""
 
     # Find all elements that were active more than x% of the time (high_threshold)
-    above_freq_TF_mask = on_tracker_TF >= high_threshold
+    above_freq_TFRRC_mask = on_tracker_TFRRC >= high_threshold
 
     # Find all elements that were active less than x% of the time (low_threshold)
-    below_freq_TF_mask = off_tracker_TF <= low_threshold
+    below_freq_TFRRC_mask = off_tracker_TFRRC <= low_threshold
 
     # For the counts tensor, zero out all elements that were not active enough
-    above_counts_TF = on_counts_TF * above_freq_TF_mask
+    above_counts_TFRRC = on_counts_TFRRC * above_freq_TFRRC_mask
 
     # Find all features that were active more than significance_threshold times
     # This isn't required for the off_counts_TF tensor
-    above_counts_TF_mask = above_counts_TF >= significance_threshold
+    above_counts_TFRRC_mask = above_counts_TFRRC >= significance_threshold
 
     # Zero out all elements that were not active enough. Now we have elements that
     # were active more than high_threshold % and significance_threshold times (high precision)
     # But, this doesn't say anything about recall
-    above_counts_TF = above_counts_TF * above_counts_TF_mask
+    above_counts_TFRRC = above_counts_TFRRC * above_counts_TFRRC_mask
 
     # Zero out all elements that were active when the feature was off. Now, this is
     # a classifier that is high precision and high recall
-    classifier_TF = above_counts_TF * below_freq_TF_mask
+    classifier_TFRRC = above_counts_TFRRC * below_freq_TFRRC_mask
 
     # All nonzero elements are set to 1
-    above_counts_TF_binary = (above_counts_TF != 0).int()
-    classifier_TF_binary = (classifier_TF != 0).int()
+    above_counts_TFRRC_binary = (above_counts_TFRRC != 0).int()
+    classifier_TFRRC_binary = (classifier_TFRRC != 0).int()
 
     # Count the number of elements that were active more than high_threshold % and significance_threshold times
-    above_counts_T = above_counts_TF_binary.sum(dim=(1))
-    classifier_counts_T = classifier_TF_binary.sum(dim=(1))
+    above_counts_T = einops.reduce(above_counts_TFRRC_binary, "T F R1 R2 C -> T", "sum")
+    classifier_counts_T = einops.reduce(classifier_TFRRC_binary, "T F R1 R2 C -> T", "sum")
 
     if verbose:
         print(
@@ -72,7 +72,7 @@ def get_above_below_counts(
         )
         print(above_counts_T)
 
-        above_T = above_freq_TF_mask.sum(dim=(1))
+        above_T = einops.reduce(above_freq_TFRRC_mask, "T F R1 R2 C -> T", "sum")
 
         print(
             f"\nThis is the number of elements that were active more than {high_threshold} percent."
@@ -95,11 +95,11 @@ def get_above_below_counts(
 
     return (
         above_counts_T,
-        above_counts_TF_binary,
-        above_counts_TF,
+        above_counts_TFRRC_binary,
+        above_counts_TFRRC,
         classifier_counts_T,
-        classifier_TF_binary,
-        classifier_TF,
+        classifier_TFRRC_binary,
+        classifier_TFRRC,
     )
 
 
@@ -115,30 +115,30 @@ def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tens
 
 
 def mask_initial_board_state(
-    on_tracker: torch.Tensor, device: torch.device, mine_state: bool = False
+    on_tracker_TFRRC: torch.Tensor, device: torch.device, mine_state: bool = False
 ) -> torch.Tensor:
     initial_board = chess.Board()
-    initial_state = chess_utils.board_to_piece_state(initial_board)
-    initial_state = initial_state.view(1, 1, 8, 8)
-    initial_one_hot = chess_utils.state_stack_to_one_hot(
-        chess_utils.piece_config, device, initial_state
+    initial_state_RRC = chess_utils.board_to_piece_state(initial_board)
+    initial_state_11RRC = einops.rearrange(initial_state_RRC, "R1 R2 -> 1 1 R1 R2")
+    initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(
+        chess_utils.piece_config, device, initial_state_11RRC
     ).squeeze()
 
     if mine_state:
-        initial_one_hot = transform_board_from_piece_color_to_piece(initial_one_hot)
+        initial_one_hot_11RRC = transform_board_from_piece_color_to_piece(initial_one_hot_11RRC)
 
-    mask = initial_one_hot == 1
-    on_tracker[:, :, mask] = 0
+    mask_11RRC = initial_one_hot_11RRC == 1
+    on_tracker_TFRRC[:, :, mask_11RRC] = 0
 
-    return on_tracker
+    return on_tracker_TFRRC
 
 
 def get_summary_board(
-    above_counts_T: torch.Tensor, above_counts_TF: torch.Tensor, original_shape: tuple[int]
+    above_counts_T: torch.Tensor, above_counts_TFRRC: torch.Tensor, original_shape: tuple[int]
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
     best_idx = torch.argmax(above_counts_T)
 
-    above_counts_TFRRC = above_counts_TF.view(original_shape)
+    above_counts_TFRRC = above_counts_TFRRC
 
     best_counts_FRRC = above_counts_TFRRC[best_idx, ...]
 
@@ -180,12 +180,8 @@ def analyze_board_tracker(
 
     num_thresholds = results[function][normalized_on_key].shape[0]
 
-    piece_state_on_normalized = (
-        results[function][normalized_on_key].clone().view(num_thresholds, -1)
-    )
-    piece_state_off_normalized = (
-        results[function][normalized_off_key].clone().view(num_thresholds, -1)
-    )
+    piece_state_on_normalized = results[function][normalized_on_key].clone()
+    piece_state_off_normalized = results[function][normalized_off_key].clone()
     piece_state_on_TFRRC = results[function][on_key].clone()
     piece_state_off_TFRRC = results[function][off_key].clone()
     original_shape = piece_state_on_TFRRC.shape
@@ -213,17 +209,13 @@ def analyze_board_tracker(
 
     print(f"Class counts: {class_counts_C}")
 
-    # Flatten the tensor to a 2D shape for compatibility with get_above_below_counts()
-    piece_state_on_TFRRC = piece_state_on_TFRRC.view(num_thresholds, -1)
-    piece_state_off_TFRRC = piece_state_off_TFRRC.view(num_thresholds, -1)
-
     (
         above_counts_T,
-        above_counts_TF_binary,
-        above_counts_TF,
+        above_counts_TFRRC_binary,
+        above_counts_TFRRC,
         classifier_counts_T,
-        classifier_TF_binary,
-        classifier_counts_TF,
+        classifier_TFRRC_binary,
+        classifier_counts_TFRRC,
     ) = get_above_below_counts(
         piece_state_on_normalized,
         piece_state_on_TFRRC,
@@ -235,7 +227,7 @@ def analyze_board_tracker(
     )
 
     summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
-        above_counts_T, above_counts_TF_binary, original_shape
+        above_counts_T, above_counts_TFRRC_binary, original_shape
     )
 
     (
@@ -243,7 +235,7 @@ def analyze_board_tracker(
         classifier_class_dict_C,
         classifier_coverage_RR,
         classifier_coverage,
-    ) = get_summary_board(classifier_counts_T, classifier_TF_binary, original_shape)
+    ) = get_summary_board(classifier_counts_T, classifier_TFRRC_binary, original_shape)
 
     # -1 because we mask off blank
     max_possible_coverage = (
@@ -336,16 +328,16 @@ if __name__ == "__main__":
             else:
                 (
                     above_counts_T,
-                    above_counts_binary_TF,
-                    above_counts_TF,
+                    above_counts_binary_TFRRC,
+                    above_counts_TFRRC,
                     classifier_counts_T,
-                    classifier_counts_binary_TF,
-                    classifier_counts_TF,
+                    classifier_counts_binary_TFRRC,
+                    classifier_counts_TFRRC,
                 ) = get_above_below_counts(
-                    results[func_name]["on_normalized"].squeeze().clone(),
-                    results[func_name]["on"].squeeze().clone(),
-                    results[func_name]["off_normalized"].squeeze().clone(),
-                    results[func_name]["off"].squeeze().clone(),
+                    results[func_name]["on_normalized"].clone(),
+                    results[func_name]["on"].clone(),
+                    results[func_name]["off_normalized"].clone(),
+                    results[func_name]["off"].clone(),
                     low_threshold,
                     high_threshold,
                     significance_threshold=significance_threshold,
