@@ -481,9 +481,12 @@ if __name__ == "__main__":
 
     for autoencoder_group_path, indexing_function in param_combinations:
         print(f"Autoencoder group path: {autoencoder_group_path}")
-        print(f"Indexing function: {indexing_function}")
+        indexing_function_name = "None"
+        if indexing_function is not None:
+            indexing_function_name = indexing_function.__name__
+        print(f"Indexing function: {indexing_function_name}")
 
-        output_path = f"analysis/{autoencoder_group_path.replace('/','_')}_indexing_{indexing_function}_results/"
+        output_path = f"analysis/{autoencoder_group_path.replace('/','_')}_indexing_{indexing_function_name}_results/"
 
         if not os.path.exists(output_path):
             os.makedirs(output_path)
