@@ -22,11 +22,17 @@ To perform analysis on a group of SAEs, run `python circuits/sae_stats_collectio
 I've been using this tip from Noam Shazeer:
 
 Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
+
 F  = features and minibatch size depending on the context (maybe this is stupid)
+
 B = batch_size
+
 L = seq length (context length)
+
 T = thresholds
+
 R = rows (or cols)
+
 C = classes for one hot encoding
 
 For example, boards begins as shape (Batch, seq_len, rows, rows, classes), and after einops.repeat is shape (num_thresholds, num_features, batch_size, seq_len, rows, rows, classes).
