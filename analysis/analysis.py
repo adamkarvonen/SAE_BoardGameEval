@@ -159,18 +159,7 @@ def analyze_board_tracker(
     low_threshold: float,
     significance_threshold: int,
     mine_state: bool = False,
-) -> tuple[  # TODO: This is an excessively long type hint. Maybe put this into a dict / dataclass?
-    torch.Tensor,
-    torch.Tensor,
-    torch.Tensor,
-    torch.Tensor,
-    int,
-    torch.Tensor,
-    torch.Tensor,
-    torch.Tensor,
-    torch.Tensor,
-    int,
-]:
+):
     """Prepare the board tracker for analysis."""
 
     othello = False
@@ -226,32 +215,41 @@ def analyze_board_tracker(
         classifier_coverage,
     ) = get_summary_board(classifier_counts_T, classifier_TF, original_shape)
 
-    return (
-        above_counts_T,
-        summary_board_RR,
-        class_dict_C,
-        coverage_RR,
-        coverage,
-        classifier_counts_T,
-        classifier_summary_board_RR,
-        classifier_class_dict_C,
-        classifier_coverage_RR,
-        classifier_coverage,
+    # -1 because we mask off blank
+    max_possible_coverage = (
+        summary_board_RR.shape[0] * summary_board_RR.shape[1] * (class_dict_C.shape[0] - 1)
     )
+
+    print(
+        f"{func_name} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
+    )
+    print(above_counts_T)
+    print(summary_board_RR)
+    print(class_dict_C)
+    print(coverage_RR)
+    print()
+    print(
+        f"{func_name} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
+    )
+    print(classifier_counts_T)
+    print(classifier_summary_board_RR)
+    print(classifier_class_dict_C)
+    print(classifier_coverage_RR)
+    print()
 
 
 if __name__ == "__main__":
     folder_name = "layer5_large_sweep_results2/"
     folder_name = "layer0_results/"
-    # folder_name = "layer5_indexing_results/"
+    folder_name = "layer5_indexing_results/"
     # folder_name = "layer5_large_sweep_indexing_results/"
     # folder_name = "group1_results/"
     # folder_name = "before_after_compare/"
-    folder_name = "othello_results/"
+    # folder_name = "othello_results/"
     # folder_name = "othello_layer5_even_index/"
     # folder_name = "othello_mine_yours_results/"
     # folder_name = "othello_layer0_results/"
-    folder_name = "othello_even_no_last_move_results/"
+    # folder_name = "othello_even_no_last_move_results/"
     # folder_name = "othello_layer0_no_last_move/"
     file_names = get_all_file_names(folder_name)
     device = torch.device("cpu")
@@ -294,18 +292,7 @@ if __name__ == "__main__":
             func_name = custom_function.__name__
             config = chess_utils.config_lookup[func_name]
             if config.num_rows == 8:
-                (
-                    piece_state_above_counts_T,
-                    summary_board,
-                    class_dict,
-                    coverage_RR,
-                    coverage,
-                    classifier_counts_T,
-                    classifier_summary_board,
-                    classifier_class_dict,
-                    classifier_coverage_RR,
-                    classifier_coverage,
-                ) = analyze_board_tracker(
+                analyze_board_tracker(
                     results,
                     func_name,
                     "on",
@@ -316,18 +303,6 @@ if __name__ == "__main__":
                     significance_threshold,
                 )
 
-                print(f"{func_name} (high precision) coverage {coverage}:")
-                print(piece_state_above_counts_T)
-                print(summary_board)
-                print(class_dict)
-                print(coverage_RR)
-                print()
-                print(f"{func_name} (high precision and recall) coverage {classifier_coverage}:")
-                print(classifier_counts_T)
-                print(classifier_summary_board)
-                print(classifier_class_dict)
-                print(classifier_coverage_RR)
-                print()
             else:
                 above_counts_T, above_counts_TF, classifier_counts_T, classifier_counts_TF = (
                     get_above_below_counts(
