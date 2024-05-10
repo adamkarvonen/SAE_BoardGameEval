@@ -311,7 +311,7 @@ if __name__ == "__main__":
         file_names = get_all_results_file_names(folder_name)
         for file_name in file_names:
             print()
-            print(file_name)
+            print(folder_name, file_name)
             with open(folder_name + file_name, "rb") as file:
                 results = pickle.load(file)
                 results = to_device(results, device)
