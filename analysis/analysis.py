@@ -162,21 +162,33 @@ def get_timestep_counts(
     piece_state_on_TFRRC: torch.Tensor,
     piece_state_off_counting_TFRRC: torch.Tensor,
 ):
-    timesteps_counts_T = einops.reduce(above_counts_TFRRC, "T F R1 R2 C -> T", "sum")
-    best_idx = torch.argmax(timesteps_counts_T)
+    """Get the counts for the total number of times each piece type was present on a square over all time steps.
+    Get the counts for the total number of times a feature classifier predicted a piece type was present on a square
+    over all time steps. If the SAE was perfect, these two counts should be equal."""
     total_counts_TFRRC = piece_state_on_TFRRC + piece_state_off_counting_TFRRC
 
     class_counts_C = einops.reduce(total_counts_TFRRC[0][0], "R1 R2 C -> C", "sum")
     class_counts_C2 = einops.reduce(total_counts_TFRRC[1][2], "R1 R2 C -> C", "sum")
 
+    assert torch.equal(total_counts_TFRRC[0][0], total_counts_TFRRC[1][2])
     assert torch.equal(class_counts_C, class_counts_C2)
 
-    print(f"Class counts: {class_counts_C}")
+    # print(f"Class counts: {class_counts_C}")
 
-    above_counts_FRRC = above_counts_TFRRC[best_idx, ...]
-    actual_class_counts_C = einops.reduce(above_counts_FRRC, "F R1 R2 C -> C", "sum")
+    # above_counts_FRRC = above_counts_TFRRC[best_idx, ...]
+    actual_class_counts_TC = einops.reduce(above_counts_TFRRC, "T F R1 R2 C -> T C", "sum")
+    actual_class_counts_T = einops.reduce(actual_class_counts_TC, "T C -> T", "sum")
 
-    print(f"Actual class counts: {actual_class_counts_C}")
+    best_idx = torch.argmax(actual_class_counts_T)
+    actual_class_counts_C = actual_class_counts_TC[best_idx, ...]
+
+    # print(f"Actual class counts: {actual_class_counts_C}")
+
+    class_counts_C[class_counts_C == 0] += 1  # Avoid division by zero
+    coverage2_C = actual_class_counts_C / class_counts_C
+    coverage2 = coverage2_C.sum().item() / coverage2_C.size(0)
+
+    print(f"Percent coverage over time dimension: {coverage2}")
 
 
 def analyze_board_tracker(
@@ -240,7 +252,9 @@ def analyze_board_tracker(
         significance_threshold=significance_threshold,
     )
 
+    print("\nTime coverage for high precision:")
     get_timestep_counts(above_counts_TFRRC, piece_state_on_TFRRC, piece_state_off_counting_TFRRC)
+    print("\nTime coverage for high precision and recall:")
     get_timestep_counts(
         classifier_counts_TFRRC,
         piece_state_on_TFRRC,
@@ -294,6 +308,9 @@ if __name__ == "__main__":
     # folder_name = "othello_layer0_results/"
     # folder_name = "othello_even_no_last_move_results/"
     # folder_name = "othello_layer0_no_last_move/"
+    # folder_name = "autoencoders_othello_layer5_ef4__indexing_None_results/"
+    # folder_name = "autoencoders_othello_layer0__indexing_None_results/"
+    # folder_name = "autoencoders_chess_layer_0_subset__indexing_find_dots_indices_results/"
     file_names = get_all_file_names(folder_name)
     device = torch.device("cpu")
 
