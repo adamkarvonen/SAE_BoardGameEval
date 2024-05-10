@@ -7,15 +7,15 @@ import os
 
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
-from circuits.utils import to_device
+from circuits.utils import to_device, get_nested_folders
 from circuits.eval_sae_as_classifier import normalize_tracker
 
 
-def get_all_file_names(folder_name: str) -> list[str]:
-    """Get all file names with the .pkl extension in the given folder."""
+def get_all_results_file_names(folder_name: str) -> list[str]:
+    """Get all file names with results.pkl in the given folder."""
     file_names = []
     for file_name in os.listdir(folder_name):
-        if file_name.endswith(".pkl") and "feature_labels" not in file_name:
+        if "results.pkl" in file_name:
             file_names.append(file_name)
     return file_names
 
@@ -299,112 +299,102 @@ def analyze_board_tracker(
 
 
 if __name__ == "__main__":
-    folder_name = "layer5_large_sweep_results2/"
-    folder_name = "layer0_results/"
-    folder_name = "layer5_indexing_results/"
-    # folder_name = "layer5_large_sweep_indexing_results/"
-    # folder_name = "group1_results/"
-    # folder_name = "before_after_compare/"
-    # folder_name = "othello_results/"
-    # folder_name = "othello_layer5_even_index/"
-    # folder_name = "othello_mine_yours_results/"
-    # folder_name = "othello_layer0_results/"
-    # folder_name = "othello_even_no_last_move_results/"
-    # folder_name = "othello_layer0_no_last_move/"
-    # folder_name = "autoencoders_othello_layer5_ef4__indexing_None_results/"
-    # folder_name = "autoencoders_othello_layer0__indexing_None_results/"
-    # folder_name = "autoencoders_chess_layer_0_subset__indexing_find_dots_indices_results/"
-    file_names = get_all_file_names(folder_name)
-    device = torch.device("cpu")
+    group_folder_name = "autoencoders/othello_layer0/"
+    folder_names = get_nested_folders(group_folder_name)
 
+    device = torch.device("cpu")
     high_threshold = 0.95
     low_threshold = 0.1
     significance_threshold = 10
 
-    for file_name in file_names:
-        print()
-        print(file_name)
-        with open(folder_name + file_name, "rb") as file:
-            results = pickle.load(file)
-            results = to_device(results, device)
+    for folder_name in folder_names:
+        file_names = get_all_results_file_names(folder_name)
+        for file_name in file_names:
+            print()
+            print(file_name)
+            with open(folder_name + file_name, "rb") as file:
+                results = pickle.load(file)
+                results = to_device(results, device)
 
-        custom_functions = []
+            custom_functions = []
 
-        for key in results:
-            if key in chess_utils.config_lookup:
-                custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
+            for key in results:
+                if key in chess_utils.config_lookup:
+                    custom_functions.append(
+                        chess_utils.config_lookup[key].custom_board_state_function
+                    )
 
-        results = normalize_tracker(
-            results,
-            "on",
-            custom_functions,
-            device,
-        )
+            results = normalize_tracker(
+                results,
+                "on",
+                custom_functions,
+                device,
+            )
 
-        results = normalize_tracker(
-            results,
-            "off",
-            custom_functions,
-            device,
-        )
+            results = normalize_tracker(
+                results,
+                "off",
+                custom_functions,
+                device,
+            )
 
-        print("Number of alive features:")
-        print(results["on_count"].shape[1])
+            print("Number of alive features:")
+            print(results["on_count"].shape[1])
 
-        print("Number of inputs:")
-        print(results["hyperparameters"]["n_inputs"])
+            print("Number of inputs:")
+            print(results["hyperparameters"]["n_inputs"])
 
-        thresholds_TF11 = results["hyperparameters"]["thresholds"]
-        feature_labels = {
-            "thresholds": thresholds_TF11,
-            "alive_features": results["alive_features"],
-            "indexing_function": results["hyperparameters"]["indexing_function"],
-        }
+            thresholds_TF11 = results["hyperparameters"]["thresholds"]
+            feature_labels = {
+                "thresholds": thresholds_TF11,
+                "alive_features": results["alive_features"],
+                "indexing_function": results["hyperparameters"]["indexing_function"],
+            }
 
-        for custom_function in custom_functions:
-            func_name = custom_function.__name__
-            config = chess_utils.config_lookup[func_name]
-            if config.num_rows == 8:
-                above_counts_binary_TFRRC = analyze_board_tracker(
-                    results,
-                    func_name,
-                    "on",
-                    "off",
-                    device,
-                    high_threshold,
-                    low_threshold,
-                    significance_threshold,
-                )
-                feature_labels[func_name] = above_counts_binary_TFRRC
+            for custom_function in custom_functions:
+                func_name = custom_function.__name__
+                config = chess_utils.config_lookup[func_name]
+                if config.num_rows == 8:
+                    above_counts_binary_TFRRC = analyze_board_tracker(
+                        results,
+                        func_name,
+                        "on",
+                        "off",
+                        device,
+                        high_threshold,
+                        low_threshold,
+                        significance_threshold,
+                    )
+                    feature_labels[func_name] = above_counts_binary_TFRRC
 
-            else:
-                (
-                    above_counts_T,
-                    above_counts_binary_TFRRC,
-                    above_counts_TFRRC,
-                    classifier_counts_T,
-                    classifier_counts_binary_TFRRC,
-                    classifier_counts_TFRRC,
-                ) = get_above_below_counts(
-                    results[func_name]["on_normalized"].clone(),
-                    results[func_name]["on"].clone(),
-                    results[func_name]["off_normalized"].clone(),
-                    results[func_name]["off"].clone(),
-                    low_threshold,
-                    high_threshold,
-                    significance_threshold=significance_threshold,
-                )
+                else:
+                    (
+                        above_counts_T,
+                        above_counts_binary_TFRRC,
+                        above_counts_TFRRC,
+                        classifier_counts_T,
+                        classifier_counts_binary_TFRRC,
+                        classifier_counts_TFRRC,
+                    ) = get_above_below_counts(
+                        results[func_name]["on_normalized"].clone(),
+                        results[func_name]["on"].clone(),
+                        results[func_name]["off_normalized"].clone(),
+                        results[func_name]["off"].clone(),
+                        low_threshold,
+                        high_threshold,
+                        significance_threshold=significance_threshold,
+                    )
 
-                print(f"{func_name} (high precision):")
-                print(above_counts_T)
-                print()
-                print(f"{func_name} (high precision and recall):")
-                print(classifier_counts_T)
-                print()
+                    print(f"{func_name} (high precision):")
+                    print(above_counts_T)
+                    print()
+                    print(f"{func_name} (high precision and recall):")
+                    print(classifier_counts_T)
+                    print()
 
-        feature_labels_name = file_name.split(".")[0] + "_feature_labels.pkl"
-        with open(folder_name + feature_labels_name, "wb") as write_file:
-            pickle.dump(feature_labels, write_file)
+            feature_labels_name = file_name.split(".")[0] + "_feature_labels.pkl"
+            with open(folder_name + feature_labels_name, "wb") as write_file:
+                pickle.dump(feature_labels, write_file)
 
         # results["board_to_piece_state"]["on_piece"] = transform_board_from_piece_color_to_piece(
         #     results["board_to_piece_state"]["on"]
