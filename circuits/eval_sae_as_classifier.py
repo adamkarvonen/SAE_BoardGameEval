@@ -487,7 +487,9 @@ def construct_dataset(
     if not othello:
         construct_eval_dataset(custom_functions, n_inputs, output_path=output_path, device=device)
     else:
-        construct_othello_dataset(custom_functions, n_inputs, output_path=data_path, device=device)
+        construct_othello_dataset(
+            custom_functions, n_inputs, output_path=output_path, device=device
+        )
 
 
 if __name__ == "__main__":

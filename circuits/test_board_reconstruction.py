@@ -22,6 +22,15 @@ import circuits.othello_utils as othello_utils
 import circuits.othello_engine_utils as othello_engine_utils
 
 
+def get_all_feature_label_file_names(folder_name: str) -> list[str]:
+    """Get all file names with feature_labels.pkl in the given folder."""
+    file_names = []
+    for file_name in os.listdir(folder_name):
+        if "feature_labels.pkl" in file_name:
+            file_names.append(file_name)
+    return file_names
+
+
 def initialize_reconstruction_dict(
     custom_functions: list[Callable],
     num_thresholds: int,
@@ -157,6 +166,7 @@ def compare_constructed_to_true_boards(
 def test_board_reconstructions(
     custom_functions: list[Callable],
     autoencoder_path: str,
+    feature_label_file: str,
     n_inputs: int,
     batch_size: int,
     device: torch.device,
@@ -177,7 +187,7 @@ def test_board_reconstructions(
 
     ae_bundle.buffer = None
 
-    with open(autoencoder_path + "feature_labels.pkl", "rb") as f:
+    with open(autoencoder_path + feature_label_file, "rb") as f:
         feature_labels = pickle.load(f)
 
     thresholds_TF11 = feature_labels["thresholds"].to(device)
@@ -259,7 +269,8 @@ def test_board_reconstructions(
     for custom_function in custom_functions:
         print(results[custom_function.__name__])
 
-    with open(autoencoder_path + "board_reconstruction_results.pkl", "wb") as f:
+    output_filename = feature_label_file.replace("feature_labels.pkl", "reconstruction_results.pkl")
+    with open(autoencoder_path + output_filename, "wb") as f:
         pickle.dump(results, f)
 
 
@@ -268,36 +279,33 @@ if __name__ == "__main__":
     # VRAM does not scale with n_inputs, only batch_size
     # You can increase batch_size if you have more VRAM, but it's not a large speedup
     batch_size = 10
-    n_inputs = 50
+    n_inputs = 100
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
     data_path = "data.pkl"
 
     autoencoder_group_paths = ["autoencoders/group1/"]
-    # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
     # autoencoder_group_paths = ["autoencoders/othello_layer0/"]
-    indexing_functions = [None, chess_utils.get_even_list_indices]
-    indexing_functions = [None]  # I'm experimenting with these for Othello
 
     # IMPORTANT NOTE: This is hacky, and means all autoencoders in the group must be for the same game
-    othello = eval_sae.check_if_autoencoder_is_othello(autoencoder_group_paths[0])
-
-    param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
-
-    print("Constructing evaluation dataset...")
-
-    model_name = eval_sae.get_model_name(othello)
 
     print("Starting evaluation...")
 
-    for autoencoder_group_path, indexing_function in param_combinations:
+    for autoencoder_group_path in autoencoder_group_paths:
         print(f"Autoencoder group path: {autoencoder_group_path}")
+
+        othello = eval_sae.check_if_autoencoder_is_othello(autoencoder_group_path)
+        model_name = eval_sae.get_model_name(othello)
 
         folders = get_nested_folders(autoencoder_group_path)
 
+        # All of this fiddling around is to make sure we have the right custom functions
+        # So we only have to construct the evaluation dataset once
         first_folder = folders[0]
-        with open(first_folder + "feature_labels.pkl", "rb") as f:
+        first_feature_labels = get_all_feature_label_file_names(first_folder)[0]
+        with open(first_folder + first_feature_labels, "rb") as f:
             feature_labels = pickle.load(f)
 
         custom_functions = []
@@ -305,20 +313,26 @@ if __name__ == "__main__":
             if key in chess_utils.config_lookup:
                 custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
 
+        print("Constructing evaluation dataset...")
+
         # TODO: Let's not write to disk, just keep it in memory
+        # TODO: This is pretty hacky. It assumes that all autoencoder_group_paths are othello XOR chess
+        # It shouldn't be too hard to make it smarter
         eval_sae.construct_dataset(othello, custom_functions, n_inputs, data_path, "cpu")
 
         for autoencoder_path in folders:
-            if "ef=4_lr=1e-03_l1=1e-01_layer=5" not in autoencoder_path:
-                continue
             print("Testing autoencoder:", autoencoder_path)
-            test_board_reconstructions(
-                custom_functions,
-                autoencoder_path,
-                n_inputs,
-                batch_size,
-                device,
-                model_name,
-                data_path,
-                othello=othello,
-            )
+            feature_label_files = get_all_feature_label_file_names(autoencoder_path)
+
+            for feature_label_file in feature_label_files:
+                test_board_reconstructions(
+                    custom_functions,
+                    autoencoder_path,
+                    feature_label_file,
+                    n_inputs,
+                    batch_size,
+                    device,
+                    model_name,
+                    data_path,
+                    othello=othello,
+                )
