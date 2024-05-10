@@ -495,7 +495,7 @@ if __name__ == "__main__":
     # VRAM does not scale with n_inputs, only batch_size
     # You can increase batch_size if you have more VRAM, but it's not a large speedup
     batch_size = 10
-    n_inputs = 50
+    n_inputs = 1000
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
@@ -504,10 +504,13 @@ if __name__ == "__main__":
     autoencoder_group_paths = ["autoencoders/group1/"]
     # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
     autoencoder_group_paths = ["autoencoders/othello_layer0/"]
+
+    # NOTE: Suggestion: Use chess_utils.find_dots_indices() as the indexing function for chess models and None for Othello models
+
     indexing_functions = [None, chess_utils.get_even_list_indices]
     indexing_functions = [None]  # I'm experimenting with these for Othello
 
-    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for the same game
+    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
     othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
 
     param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
@@ -518,9 +521,9 @@ if __name__ == "__main__":
         custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
     else:
         custom_functions = [
-            othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
-            # othello_utils.games_batch_to_state_stack_BLRRC,
-            # othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
+            # othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
+            othello_utils.games_batch_to_state_stack_BLRRC,
+            othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
         ]
 
     model_name = get_model_name(othello)
