@@ -15,7 +15,7 @@ def get_all_file_names(folder_name: str) -> list[str]:
     """Get all file names with the .pkl extension in the given folder."""
     file_names = []
     for file_name in os.listdir(folder_name):
-        if file_name.endswith(".pkl"):
+        if file_name.endswith(".pkl") and "feature_labels" not in file_name:
             file_names.append(file_name)
     return file_names
 
@@ -203,8 +203,7 @@ def analyze_board_tracker(
     low_threshold: float,
     significance_threshold: int,
     mine_state: bool = False,
-):
-    """Prepare the board tracker for analysis."""
+) -> torch.Tensor:
 
     othello = False
 
@@ -224,25 +223,25 @@ def analyze_board_tracker(
 
     piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
 
-    if not othello:
-        piece_state_on_TFRRC = mask_initial_board_state(piece_state_on_TFRRC, device, mine_state)
-        piece_state_off_counting_TFRRC = mask_initial_board_state(
-            piece_state_off_counting_TFRRC, device, mine_state
-        )
-        # Optionally, we also mask off the blank class
-        piece_state_on_TFRRC[:, :, :, :, 6] = 0
-        piece_state_off_counting_TFRRC[:, :, :, :, 6] = 0
-    else:
-        # Optionally, we also mask off the blank class
-        piece_state_on_TFRRC[:, :, :, :, 1] = 0
-        piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
+    # if not othello:
+    #     piece_state_on_TFRRC = mask_initial_board_state(piece_state_on_TFRRC, device, mine_state)
+    #     piece_state_off_counting_TFRRC = mask_initial_board_state(
+    #         piece_state_off_counting_TFRRC, device, mine_state
+    #     )
+    #     # Optionally, we also mask off the blank class
+    #     piece_state_on_TFRRC[:, :, :, :, 6] = 0
+    #     piece_state_off_counting_TFRRC[:, :, :, :, 6] = 0
+    # else:
+    #     # Optionally, we also mask off the blank class
+    #     piece_state_on_TFRRC[:, :, :, :, 1] = 0
+    #     piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
 
     (
         above_counts_T,
-        above_counts_TFRRC_binary,
+        above_counts_binary_TFRRC,
         above_counts_TFRRC,
         classifier_counts_T,
-        classifier_counts_TFRRC_binary,
+        classifier_counts_binary_TFRRC,
         classifier_counts_TFRRC,
     ) = get_above_below_counts(
         piece_state_on_normalized,
@@ -264,7 +263,7 @@ def analyze_board_tracker(
     )
 
     summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
-        above_counts_T, above_counts_TFRRC_binary, original_shape
+        above_counts_T, above_counts_binary_TFRRC, original_shape
     )
 
     (
@@ -272,7 +271,7 @@ def analyze_board_tracker(
         classifier_class_dict_C,
         classifier_coverage_RR,
         classifier_coverage,
-    ) = get_summary_board(classifier_counts_T, classifier_counts_TFRRC_binary, original_shape)
+    ) = get_summary_board(classifier_counts_T, classifier_counts_binary_TFRRC, original_shape)
 
     # -1 because we mask off blank
     max_possible_coverage = (
@@ -295,6 +294,8 @@ def analyze_board_tracker(
     print(classifier_class_dict_C)
     print(classifier_coverage_RR)
     print()
+
+    return above_counts_binary_TFRRC
 
 
 if __name__ == "__main__":
@@ -350,11 +351,21 @@ if __name__ == "__main__":
         print("Number of alive features:")
         print(results["on_count"].shape[1])
 
+        print("Number of inputs:")
+        print(results["hyperparameters"]["n_inputs"])
+
+        thresholds_TF11 = results["hyperparameters"]["thresholds"]
+        feature_labels = {
+            "thresholds": thresholds_TF11,
+            "alive_features": results["alive_features"],
+            "indexing_function": results["hyperparameters"]["indexing_function"],
+        }
+
         for custom_function in custom_functions:
             func_name = custom_function.__name__
             config = chess_utils.config_lookup[func_name]
             if config.num_rows == 8:
-                analyze_board_tracker(
+                above_counts_binary_TFRRC = analyze_board_tracker(
                     results,
                     func_name,
                     "on",
@@ -364,6 +375,7 @@ if __name__ == "__main__":
                     low_threshold,
                     significance_threshold,
                 )
+                feature_labels[func_name] = above_counts_binary_TFRRC
 
             else:
                 (
@@ -389,6 +401,10 @@ if __name__ == "__main__":
                 print(f"{func_name} (high precision and recall):")
                 print(classifier_counts_T)
                 print()
+
+        feature_labels_name = file_name.split(".")[0] + "_feature_labels.pkl"
+        with open(folder_name + feature_labels_name, "wb") as write_file:
+            pickle.dump(feature_labels, write_file)
 
         # results["board_to_piece_state"]["on_piece"] = transform_board_from_piece_color_to_piece(
         #     results["board_to_piece_state"]["on"]
