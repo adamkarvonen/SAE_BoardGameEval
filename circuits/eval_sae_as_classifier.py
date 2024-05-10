@@ -352,8 +352,8 @@ def aggregate_statistics(
     model_path: str,
     model_name: str,
     data_path: str,
-    output_path: str,
     indexing_function: Optional[Callable] = None,
+    indexing_function_name: str = "None",
     othello: bool = False,
 ):
     """For every input, for every feature, call `aggregate_batch_statistics()`.
@@ -449,18 +449,15 @@ def aggregate_statistics(
         "n_inputs": n_inputs,
         "context_length": ae_bundle.context_length,
         "thresholds": thresholds_TF11,
-        "indexing_function": None,
+        "indexing_function": indexing_function_name,
     }
-    if indexing_function is not None:
-        hyperparameters["indexing_function"] = indexing_function.__name__
     results["hyperparameters"] = hyperparameters
     results["eval_results"] = eval_results
 
     results = to_device(results, "cpu")
-    autoencoder_results_name = output_path + autoencoder_path.replace("/", "_") + "results.pkl"
-    with open(autoencoder_results_name, "wb") as f:
-        pickle.dump(results, f)
-    with open(autoencoder_path + "results.pkl", "wb") as f:
+
+    results_file_name = f"indexing_{indexing_function_name}_n_inputs_{n_inputs}_results.pkl"
+    with open(autoencoder_path + results_file_name, "wb") as f:
         pickle.dump(results, f)
 
 
@@ -510,7 +507,7 @@ if __name__ == "__main__":
     indexing_functions = [None, chess_utils.get_even_list_indices]
     indexing_functions = [None]  # I'm experimenting with these for Othello
 
-    # IMPORTANT NOTE: This is hacky, and means all autoencoders in the group must be for the same game
+    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for the same game
     othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
 
     param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
@@ -519,7 +516,6 @@ if __name__ == "__main__":
 
     if not othello:
         custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
-
     else:
         custom_functions = [
             othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
@@ -540,11 +536,6 @@ if __name__ == "__main__":
             indexing_function_name = indexing_function.__name__
         print(f"Indexing function: {indexing_function_name}")
 
-        output_path = f"analysis/{autoencoder_group_path.replace('/','_')}_indexing_{indexing_function_name}_results/"
-
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-
         folders = get_nested_folders(autoencoder_group_path)
         for autoencoder_path in folders:
             print("Evaluating autoencoder:", autoencoder_path)
@@ -557,7 +548,7 @@ if __name__ == "__main__":
                 model_path,
                 model_name,
                 data_path,
-                output_path,
                 indexing_function=indexing_function,
+                indexing_function_name=indexing_function_name,
                 othello=othello,
             )
