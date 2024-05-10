@@ -19,3 +19,6 @@ models/*
 !models/meta.pkl
 
 data.pkl
+
+.*.swp
+.*.swo

@@ -22,6 +22,8 @@ import circuits.othello_engine_utils as othello_engine_utils
 
 from circuits.dictionary_learning.evaluation import evaluate
 
+from IPython import embed
+
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
 # F  = features and minibatch size depending on the context (maybe this is stupid)
 # B = batch_size
