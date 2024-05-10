@@ -740,6 +740,12 @@ def find_custom_indices(
     return indices
 
 
+supported_indexing_functions = {
+    find_dots_indices.__name__: find_dots_indices,
+    get_even_list_indices.__name__: get_even_list_indices,
+}
+
+
 def encode_string(meta: dict, s: str) -> list[int]:
     """Encode a string into a list of integers."""
     stoi = meta["stoi"]
