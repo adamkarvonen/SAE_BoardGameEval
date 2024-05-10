@@ -366,7 +366,7 @@ def aggregate_statistics(
         data = pickle.load(f)
 
     data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
-        autoencoder_path, batch_size, model_name, model_path, data, device, n_inputs, othello
+        autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
