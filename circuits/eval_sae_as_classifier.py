@@ -7,6 +7,7 @@ from typing import Callable, Optional
 import math
 import os
 import itertools
+import json
 
 from circuits.utils import (
     get_ae_bundle,
@@ -313,7 +314,14 @@ def apply_indexing_function(
 
 
 def prep_firing_rate_data(
-    data: dict, device: torch.device, model_name: str, othello: bool = False
+    autoencoder_path: str,
+    batch_size: int,
+    model_path: str,
+    model_name: str,
+    data: dict,
+    device: torch.device,
+    n_inputs: int,
+    othello: bool = False,
 ) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
     for key in data:
         if key == "decoded_inputs" or key == "encoded_inputs":
@@ -358,7 +366,7 @@ def aggregate_statistics(
         data = pickle.load(f)
 
     data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
-        data, device, model_name, othello
+        autoencoder_path, batch_size, model_name, model_path, data, device, n_inputs, othello
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
@@ -452,45 +460,76 @@ def aggregate_statistics(
     autoencoder_results_name = output_path + autoencoder_path.replace("/", "_") + "results.pkl"
     with open(autoencoder_results_name, "wb") as f:
         pickle.dump(results, f)
+    with open(autoencoder_path + "results.pkl", "wb") as f:
+        pickle.dump(results, f)
+
+
+def check_if_autoencoder_is_othello(autoencoder_group_path: str) -> bool:
+    folders = get_nested_folders(autoencoder_group_path)
+
+    for folder in folders:
+        with open(folder + "config.json", "r") as f:
+            config = json.load(f)
+        if config["buffer"]["ctx_len"] == 59:
+            return True
+        elif config["buffer"]["ctx_len"] == 256:
+            return False
+    raise ValueError("Could not determine if autoencoder is for Othello or Chess.")
+
+
+def get_model_name(othello: bool) -> str:
+    if othello:
+        return "Baidicoot/Othello-GPT-Transformer-Lens"
+    else:
+        return "adamkarvonen/8LayerChessGPT2"
+
+
+def construct_dataset(
+    othello: bool, custom_functions: list[Callable], n_inputs: int, output_path: str, device: str
+):
+    if not othello:
+        construct_eval_dataset(custom_functions, n_inputs, output_path=output_path, device=device)
+    else:
+        construct_othello_dataset(custom_functions, n_inputs, output_path=data_path, device=device)
 
 
 if __name__ == "__main__":
-
-    othello = True
-
     # At these settings, it uses around 3GB of VRAM
     # VRAM does not scale with n_inputs, only batch_size
     # You can increase batch_size if you have more VRAM, but it's not a large speedup
     batch_size = 10
-    feature_batch_size = 10
-    n_inputs = 1000
+    n_inputs = 50
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
     data_path = "data.pkl"
 
     autoencoder_group_paths = ["autoencoders/group1/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
+    # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer0/"]
     indexing_functions = [None, chess_utils.get_even_list_indices]
     indexing_functions = [None]  # I'm experimenting with these for Othello
+
+    # IMPORTANT NOTE: This is hacky, and means all autoencoders in the group must be for the same game
+    othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
 
     param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
 
     print("Constructing evaluation dataset...")
 
     if not othello:
-        model_name = "adamkarvonen/8LayerChessGPT2"
         custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
-        construct_eval_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
 
     else:
-        model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
         custom_functions = [
             othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
-            othello_utils.games_batch_to_state_stack_BLRRC,
-            othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
+            # othello_utils.games_batch_to_state_stack_BLRRC,
+            # othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
         ]
-        construct_othello_dataset(custom_functions, n_inputs, output_path=data_path, device="cpu")
+
+    model_name = get_model_name(othello)
+    # TODO: Let's not write to disk, just keep it in memory
+    construct_dataset(othello, custom_functions, n_inputs, data_path, "cpu")
 
     print("Starting evaluation...")
 
