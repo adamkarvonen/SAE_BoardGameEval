@@ -20,6 +20,8 @@ import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
 import circuits.othello_engine_utils as othello_engine_utils
 
+from circuits.dictionary_learning.evaluation import evaluate
+
 # Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
 # F  = features and minibatch size depending on the context (maybe this is stupid)
 # B = batch_size
@@ -362,6 +364,16 @@ def aggregate_statistics(
     alive_features_F, max_activations_F = get_firing_features(
         ae_bundle, firing_rate_n_inputs, batch_size, device
     )
+
+    eval_results = evaluate(
+        ae_bundle.ae,
+        ae_bundle.buffer,
+        max_len=ae_bundle.context_length,
+        batch_size=batch_size,
+        io="out",
+        device=device,
+    )
+
     ae_bundle.buffer = None
     num_features = len(alive_features_F)
     print(
@@ -432,6 +444,7 @@ def aggregate_statistics(
     if indexing_function is not None:
         hyperparameters["indexing_function"] = indexing_function.__name__
     results["hyperparameters"] = hyperparameters
+    results["eval_results"] = eval_results
 
     results = to_device(results, "cpu")
     autoencoder_results_name = output_path + autoencoder_path.replace("/", "_") + "results.pkl"
