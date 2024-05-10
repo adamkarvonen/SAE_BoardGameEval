@@ -20,7 +20,6 @@ def get_all_file_names(folder_name: str) -> list[str]:
     return file_names
 
 
-# TODO Reshape everything to be TFRRC, that should be easier to understand
 def get_above_below_counts(
     on_tracker_TFRRC: torch.Tensor,
     on_counts_TFRRC: torch.Tensor,
@@ -31,7 +30,10 @@ def get_above_below_counts(
     significance_threshold: int = 10,
     verbose: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Must be a 2D tensor matching shape annotation."""
+    """on_tracker_TFRRC: Every element is this: What percentage of the time was this piece on this square
+    when the feature was active above the threshold? If the feature was active 100% of the time, this is 1.
+    If the feature is a high precision classifier, this is 1.
+    If it is high recall, the corresponding off_tracker_TFRRC value is 0."""
 
     # Find all elements that were active more than x% of the time (high_threshold)
     above_freq_TFRRC_mask = on_tracker_TFRRC >= high_threshold
