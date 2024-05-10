@@ -2,6 +2,7 @@
 # Imports
 import torch as t
 import numpy as np
+import itertools
 
 from nnsight import LanguageModel
 
@@ -30,9 +31,9 @@ d_submodule = model.config.hidden_size
 
 buffer_size = int(1e4/1)
 llm_batch_size = 256
-sae_batch_size = 4096
+sae_batch_size = 8192
 
-num_tokens = 1_228_800_000 #300_000_000
+num_tokens = 300_000_000
 
 # load chess data
 generator = hf_dataset_to_generator("adamkarvonen/chess_sae_text")
@@ -52,123 +53,127 @@ activation_buffer = ActivationBuffer(
 #%% 
 # Training
 
-
 seed = 42
 steps = int(num_tokens / sae_batch_size) # Total number of batches to train
-# num_tokens = out_batch_size * steps
-warmup_steps = 1000 # Warmup period at start of training and after each resample
 save_steps = int(steps/4)
-expansion_factor = 32
+
+
+# constants for training
+warmup_steps = 1000 # Warmup period at start of training and after each resample
 resample_steps = None
-lr = 3e-4 # 3e-4
-# initial_sparsity_penalties = t.logspace(np.log10(0.05), np.log10(5), 6)   
-
-# for pythia 70m deduped
-# initial_sparsity_penalties = list(t.logspace(-1.3,-1, 3)) + list(t.logspace(0.2, 0.5, 3))
-
-# initial_sparsity_penalties = t.logspace(np.log10(0.003), np.log10(1), 6)    # for pythia 14m
-# initial_sparsity_penalties = t.logspace(np.log10(0.001), np.log10(0.005), 10)    # for pythia 14m, jump
-# initial_sparsity_penalties = t.logspace(np.log10(0.1), np.log10(1), 10)    # for pythia 14m, gated
-# initial_sparsity_penalties = t.tensor([0.1,])
 log_steps = 5 # Log the training 
 p_start = 1
 p_end = 0.2
-anneal_start = int(steps/10) #10000
 anneal_end = None #steps - int(steps/10)
-#
+
+# create the list of configs
 trainer_configs = []
-for sp in t.logspace(-1.4,-1.3, 3):
-    sp = sp.item()
-    trainer_configs.append({
-        'trainer' : PAnnealTrainer,
-        'dict_class' : AutoEncoder,
-        'activation_dim' : d_submodule,
-        'dict_size' : expansion_factor*d_submodule,
-        'lr' : lr,
-        'sparsity_function' : 'Lp^p',
-        'initial_sparsity_penalty' : sp,
-        'p_start' : p_start,
-        'p_end' : p_end,
-        'anneal_start' : anneal_start,
-        'anneal_end' : anneal_end,
-        'sparsity_queue_length' : 10,
-        'n_sparsity_updates' : "continuous",
-        'warmup_steps' : warmup_steps,
-        'resample_steps' : resample_steps,
-        'steps' : steps,
-        'seed' : seed,
-        'wandb_name' : f'PAnnealTrainer-chess-alpha{sp}L_p^p',
-    })
-#for sp in t.logspace(-1.1,-0.95, 3):
-#    sp = sp.item()
+
+# grid search sweep
+learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
+expansion_factor_ = 2**t.arange(3, 5)
+sparsity_queue_length_ = [10]
+anneal_start_ = t.logspace(start=2, end=4, steps=2, base=10)
+n_sparsity_updates_ = [10]
+initial_sparsity_penalty_ = t.logspace(-1.4,-1.1, 5)
+
+param_combinations = itertools.product(
+    learning_rate_,
+    expansion_factor_,
+    sparsity_queue_length_,
+    anneal_start_,
+    n_sparsity_updates_,
+    initial_sparsity_penalty_)
+    
+#for i, param_setting in enumerate(param_combinations):
+#    lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = param_setting
+#
 #    trainer_configs.append({
-#        'trainer' : StandardTrainer,
+#        'trainer' : PAnnealTrainer,
 #        'dict_class' : AutoEncoder,
 #        'activation_dim' : d_submodule,
-#        'dict_size' : expansion_factor*d_submodule,
-#        'lr' : lr,
-#        'l1_penalty' : sp,
-#        'warmup_steps' : warmup_steps,
-#        'resample_steps' : resample_steps,
-#        'seed' : seed,
-#        'wandb_name' : f'StandardTrainer-chess-alpha{sp}',
-#    })
-#    
-## for sp in t.logspace(-1.3,-1, 3):
-##     sp = sp.item()
-#    # trainer_configs.append({
-#    #     'trainer' : JumpSAETrainer,
-#    #     'dict_class' : JumpAutoEncoder,
-#    #     'activation_dim' : d_submodule,
-#    #     'dict_size' : expansion_factor*d_submodule,
-#    #     'lr' : lr,
-#    #     'l1_penalty' : sp,
-#    #     'warmup_steps' : warmup_steps,
-#    #     'resample_steps' : resample_steps,
-#    #     'seed' : seed,
-#    #     'wandb_name' : f'JumpSAETrainer-alpha{sp}',
-#    # })
-#
-#for sp in t.logspace(-0.15, 0.15, 3):
-#    sp = sp.item()
-#    trainer_configs.append({
-#        'trainer' : GatedSAETrainer,
-#        'dict_class' : GatedAutoEncoder,
-#        'activation_dim' : d_submodule,
-#        'dict_size' : expansion_factor*d_submodule,
-#        'lr' : lr,
-#        'l1_penalty' : sp,
-#        'warmup_steps' : warmup_steps,
-#        'resample_steps' : resample_steps,
-#        'seed' : seed,
-#        'wandb_name' : f'GatedSAETrainer-chess-alpha{sp}',
-#    })
-#for sp in t.logspace(-0.4, -0.1, 3):
-#    sp = sp.item()
-#    trainer_configs.append({
-#        'trainer' : GatedAnnealTrainer,
-#        'dict_class' : GatedAutoEncoder,
-#        'activation_dim' : d_submodule,
-#        'dict_size' : expansion_factor*d_submodule,
-#        'lr' : lr,
+#        'dict_size' : expansion_factor.item()*d_submodule,
+#        'lr' : lr.item(),
 #        'sparsity_function' : 'Lp^p',
-#        'initial_sparsity_penalty' : sp,
+#        'initial_sparsity_penalty' : sp.item(),
 #        'p_start' : p_start,
 #        'p_end' : p_end,
-#        'anneal_start' : anneal_start,
+#        'anneal_start' : int(anneal_start.item()),
 #        'anneal_end' : anneal_end,
-#        'sparsity_queue_length' : 10,
-#        'n_sparsity_updates' : "continuous",
+#        'sparsity_queue_length' : sparsity_queue_length,
+#        'n_sparsity_updates' : n_sparsity_updates,
 #        'warmup_steps' : warmup_steps,
 #        'resample_steps' : resample_steps,
 #        'steps' : steps,
 #        'seed' : seed,
-#        'wandb_name' : f'GatedAnnealTrainer-chess-alpha{sp}L_p^p',
+#        'wandb_name' : f'PAnnealTrainer-chess-{i}',
+#    })
+
+
+#param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
+#
+#for i, param_setting in enumerate(param_combinations):
+#    lr, expansion_factor, sp = param_setting
+#    trainer_configs.append({
+#        'trainer' : StandardTrainer,
+#        'dict_class' : AutoEncoder,
+#        'activation_dim' : d_submodule,
+#        'dict_size' : expansion_factor.item()*d_submodule,
+#        'lr' : lr.item(),
+#        'l1_penalty' : sp.item(),
+#        'warmup_steps' : warmup_steps,
+#        'resample_steps' : resample_steps,
+#        'seed' : seed,
+#        'wandb_name' : f'StandardTrainer-chess-{i}',
+#    })
+    
+
+
+param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
+
+for i, param_setting in enumerate(param_combinations):
+    lr, expansion_factor, sp = param_setting
+    trainer_configs.append({
+        'trainer' : GatedSAETrainer,
+        'dict_class' : GatedAutoEncoder,
+        'activation_dim' : d_submodule,
+        'dict_size' : expansion_factor.item()*d_submodule,
+        'lr' : lr.item(),
+        'l1_penalty' : sp.item(),
+        'warmup_steps' : warmup_steps,
+        'resample_steps' : resample_steps,
+        'seed' : seed,
+        'wandb_name' : f'GatedSAETrainer-chess-{i}',
+    })
+
+
+#for i, param_setting in enumerate(param_combinations):
+#    lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = param_setting
+#
+#    trainer_configs.append({
+#        'trainer' : GatedAnnealTrainer,
+#        'dict_class' : GatedAutoEncoder,
+#        'activation_dim' : d_submodule,
+#        'dict_size' : expansion_factor.item()*d_submodule,
+#        'lr' : lr.item(),
+#        'sparsity_function' : 'Lp^p',
+#        'initial_sparsity_penalty' : sp.item(),
+#        'p_start' : p_start,
+#        'p_end' : p_end,
+#        'anneal_start' : int(anneal_start.item()),
+#        'anneal_end' : anneal_end,
+#        'sparsity_queue_length' : sparsity_queue_length,
+#        'n_sparsity_updates' : n_sparsity_updates,
+#        'warmup_steps' : warmup_steps,
+#        'resample_steps' : resample_steps,
+#        'steps' : steps,
+#        'seed' : seed,
+#        'wandb_name' : f'GatedAnnealTrainer-chess-{i}',
 #    })
 
 print(f"len trainer configs: {len(trainer_configs)}")
 
-save_dir = 'circuits/dictionary_learning/dictionaries/chess-p_anneal/'
+save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-09/chess-gated/'
 #%%
 trainSAE(
     data = activation_buffer, 
