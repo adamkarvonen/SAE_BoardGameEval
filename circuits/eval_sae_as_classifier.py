@@ -49,10 +49,9 @@ def construct_eval_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
     models_path: str = "models/",
-    output_path: str = "data.pkl",
     max_str_length: int = 256,
     device: str = "cpu",
-):
+) -> dict:
     dataset = load_dataset("adamkarvonen/chess_sae_individual_games_filtered", streaming=False)
 
     meta_path = models_path + "meta.pkl"
@@ -94,19 +93,15 @@ def construct_eval_dataset(
 
         data[func_name] = one_hot_BLRRC
 
-    with open(output_path, "wb") as f:
-        pickle.dump(data, f)
-
     return data
 
 
 def construct_othello_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
-    output_path: str = "data.pkl",
     max_str_length: int = 59,
     device: str = "cpu",
-):
+) -> dict:
     """Because we are dealing with 8x8 state stacks, I won't bother creating any state stacks in advance."""
     dataset = load_dataset("adamkarvonen/othello_45MB_games", streaming=False)
     encoded_othello_inputs = []
@@ -122,9 +117,6 @@ def construct_othello_dataset(
     data = {}
     data["encoded_inputs"] = encoded_othello_inputs
     data["decoded_inputs"] = decoded_othello_inputs
-
-    with open(output_path, "wb") as f:
-        pickle.dump(data, f)
 
     return data
 
@@ -351,7 +343,7 @@ def aggregate_statistics(
     device: torch.device,
     model_path: str,
     model_name: str,
-    data_path: str,
+    data: dict,
     indexing_function: Optional[Callable] = None,
     indexing_function_name: str = "None",
     othello: bool = False,
@@ -361,9 +353,6 @@ def aggregate_statistics(
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
-
-    with open(data_path, "rb") as f:
-        data = pickle.load(f)
 
     data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
@@ -482,14 +471,14 @@ def get_model_name(othello: bool) -> str:
 
 
 def construct_dataset(
-    othello: bool, custom_functions: list[Callable], n_inputs: int, output_path: str, device: str
-):
+    othello: bool, custom_functions: list[Callable], n_inputs: int, device: str
+) -> dict:
     if not othello:
-        construct_eval_dataset(custom_functions, n_inputs, output_path=output_path, device=device)
+        data = construct_eval_dataset(custom_functions, n_inputs, device=device)
     else:
-        construct_othello_dataset(
-            custom_functions, n_inputs, output_path=output_path, device=device
-        )
+        data = construct_othello_dataset(custom_functions, n_inputs, device=device)
+
+    return data
 
 
 if __name__ == "__main__":
@@ -501,7 +490,6 @@ if __name__ == "__main__":
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
-    data_path = "data.pkl"
 
     autoencoder_group_paths = ["autoencoders/group1/"]
     # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
@@ -529,8 +517,7 @@ if __name__ == "__main__":
         ]
 
     model_name = get_model_name(othello)
-    # TODO: Let's not write to disk, just keep it in memory
-    construct_dataset(othello, custom_functions, n_inputs, data_path, "cpu")
+    data = construct_dataset(othello, custom_functions, n_inputs, device)
 
     print("Starting evaluation...")
 
@@ -552,7 +539,7 @@ if __name__ == "__main__":
                 device,
                 model_path,
                 model_name,
-                data_path,
+                data,
                 indexing_function=indexing_function,
                 indexing_function_name=indexing_function_name,
                 othello=othello,

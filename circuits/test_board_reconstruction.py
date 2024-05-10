@@ -171,15 +171,12 @@ def test_board_reconstructions(
     batch_size: int,
     device: torch.device,
     model_name: str,
-    data_path: str,
+    data: dict,
     othello: bool = False,
 ):
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
-
-    with open(data_path, "rb") as f:
-        data = pickle.load(f)
 
     data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_firing_rate_data(
         autoencoder_path, batch_size, "", model_name, data, device, n_inputs, othello
@@ -283,7 +280,6 @@ if __name__ == "__main__":
     device = "cuda"
     # device = "cpu"
     model_path = "models/"
-    data_path = "data.pkl"
 
     autoencoder_group_paths = ["autoencoders/group1/"]
     autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
@@ -315,10 +311,9 @@ if __name__ == "__main__":
 
         print("Constructing evaluation dataset...")
 
-        # TODO: Let's not write to disk, just keep it in memory
         # TODO: This is pretty hacky. It assumes that all autoencoder_group_paths are othello XOR chess
         # It shouldn't be too hard to make it smarter
-        eval_sae.construct_dataset(othello, custom_functions, n_inputs, data_path, "cpu")
+        data = eval_sae.construct_dataset(othello, custom_functions, n_inputs, device)
 
         for autoencoder_path in folders:
             print("Testing autoencoder:", autoencoder_path)
@@ -333,6 +328,6 @@ if __name__ == "__main__":
                     batch_size,
                     device,
                     model_name,
-                    data_path,
+                    data,
                     othello=othello,
                 )
