@@ -223,18 +223,18 @@ def analyze_board_tracker(
 
     piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
 
-    # if not othello:
-    #     piece_state_on_TFRRC = mask_initial_board_state(piece_state_on_TFRRC, device, mine_state)
-    #     piece_state_off_counting_TFRRC = mask_initial_board_state(
-    #         piece_state_off_counting_TFRRC, device, mine_state
-    #     )
-    #     # Optionally, we also mask off the blank class
-    #     piece_state_on_TFRRC[:, :, :, :, 6] = 0
-    #     piece_state_off_counting_TFRRC[:, :, :, :, 6] = 0
-    # else:
-    #     # Optionally, we also mask off the blank class
-    #     piece_state_on_TFRRC[:, :, :, :, 1] = 0
-    #     piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
+    if not othello:
+        piece_state_on_TFRRC = mask_initial_board_state(piece_state_on_TFRRC, device, mine_state)
+        piece_state_off_counting_TFRRC = mask_initial_board_state(
+            piece_state_off_counting_TFRRC, device, mine_state
+        )
+        # Optionally, we also mask off the blank class
+        piece_state_on_TFRRC[:, :, :, :, 6] = 0
+        piece_state_off_counting_TFRRC[:, :, :, :, 6] = 0
+    else:
+        # Optionally, we also mask off the blank class
+        piece_state_on_TFRRC[:, :, :, :, 1] = 0
+        piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
 
     (
         above_counts_T,
