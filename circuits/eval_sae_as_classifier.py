@@ -539,7 +539,7 @@ if __name__ == "__main__":
                 device,
                 model_path,
                 model_name,
-                data,
+                data.copy(),
                 indexing_function=indexing_function,
                 indexing_function_name=indexing_function_name,
                 othello=othello,

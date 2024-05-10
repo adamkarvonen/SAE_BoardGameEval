@@ -147,8 +147,6 @@ def compare_constructed_to_true_boards(
         true_positive_T = einops.reduce(true_positive_TBLRRC, "T B L R1 R2 C -> T", "sum")
         false_positive_T = einops.reduce(false_positive_TBLRRC, "T B L R1 R2 C -> T", "sum")
 
-        print(true_positive_T, false_positive_T)
-
         batch_size = true_boards_BLRRC.shape[0]
         num_board_states = true_boards_BLRRC.shape[1]
         num_rows = true_boards_BLRRC.shape[2]
@@ -283,6 +281,7 @@ if __name__ == "__main__":
 
     autoencoder_group_paths = ["autoencoders/group1/"]
     autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
     # autoencoder_group_paths = ["autoencoders/othello_layer0/"]
 
     # IMPORTANT NOTE: This is hacky, and means all autoencoders in the group must be for the same game
@@ -328,6 +327,6 @@ if __name__ == "__main__":
                     batch_size,
                     device,
                     model_name,
-                    data,
+                    data.copy(),
                     othello=othello,
                 )
