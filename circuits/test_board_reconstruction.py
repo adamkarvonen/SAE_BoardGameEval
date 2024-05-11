@@ -142,7 +142,7 @@ def compare_constructed_to_true_boards(
         )
 
         true_positive_TBLRRC = (true_bords_TBLRRC == 1) & (constructed_boards_TBLRRC == 1)
-        false_positive_TBLRRC = (constructed_boards_TBLRRC == 1) & (true_bords_TBLRRC == 0)
+        false_positive_TBLRRC = (true_bords_TBLRRC == 0) & (constructed_boards_TBLRRC == 1)
 
         true_positive_T = einops.reduce(true_positive_TBLRRC, "T B L R1 R2 C -> T", "sum")
         false_positive_T = einops.reduce(false_positive_TBLRRC, "T B L R1 R2 C -> T", "sum")
@@ -262,7 +262,7 @@ def test_board_reconstructions(
         )
 
     for custom_function in custom_functions:
-        print(results[custom_function.__name__])
+        print(custom_function.__name__, results[custom_function.__name__])
 
     output_filename = feature_label_file.replace("feature_labels.pkl", "reconstruction_results.pkl")
     with open(autoencoder_path + output_filename, "wb") as f:
@@ -319,6 +319,7 @@ if __name__ == "__main__":
             feature_label_files = get_all_feature_label_file_names(autoencoder_path)
 
             for feature_label_file in feature_label_files:
+                print("Testing feature label file:", feature_label_file)
                 test_board_reconstructions(
                     custom_functions,
                     autoencoder_path,
