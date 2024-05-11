@@ -203,6 +203,7 @@ def analyze_board_tracker(
     low_threshold: float,
     significance_threshold: int,
     mine_state: bool = False,
+    mask: bool = False,
 ) -> torch.Tensor:
 
     othello = False
@@ -223,7 +224,12 @@ def analyze_board_tracker(
 
     piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
 
-    if not othello:
+    if mask and othello:
+        # Optionally, we also mask off the blank class
+        piece_state_on_TFRRC[:, :, :, :, 1] = 0
+        piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
+
+    if mask and not othello:
         piece_state_on_TFRRC = mask_initial_board_state(piece_state_on_TFRRC, device, mine_state)
         piece_state_off_counting_TFRRC = mask_initial_board_state(
             piece_state_off_counting_TFRRC, device, mine_state
@@ -231,10 +237,6 @@ def analyze_board_tracker(
         # Optionally, we also mask off the blank class
         piece_state_on_TFRRC[:, :, :, :, 6] = 0
         piece_state_off_counting_TFRRC[:, :, :, :, 6] = 0
-    else:
-        # Optionally, we also mask off the blank class
-        piece_state_on_TFRRC[:, :, :, :, 1] = 0
-        piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
 
     (
         above_counts_T,
