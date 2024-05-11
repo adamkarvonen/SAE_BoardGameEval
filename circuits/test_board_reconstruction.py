@@ -2,24 +2,17 @@ from tqdm import tqdm
 import pickle
 import torch
 import einops
-from datasets import load_dataset
 from typing import Callable, Optional
 import math
 import os
-import itertools
 
 from circuits.utils import (
-    get_ae_bundle,
     collect_activations_batch,
     get_nested_folders,
-    get_firing_features,
     to_device,
-    AutoEncoderBundle,
 )
 import circuits.eval_sae_as_classifier as eval_sae
 import circuits.chess_utils as chess_utils
-import circuits.othello_utils as othello_utils
-import circuits.othello_engine_utils as othello_engine_utils
 
 
 def get_all_feature_label_file_names(folder_name: str) -> list[str]:
