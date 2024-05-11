@@ -2,7 +2,7 @@ import torch
 import itertools
 import pickle
 
-from circuits.nnsight_buffer import OthelloActivationBuffer
+from circuits.nnsight_buffer import NNsightActivationBuffer
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
 
@@ -45,7 +45,7 @@ submodule = get_submodule(model_name, layer, model)
 activation_dim = 512  # output dimension of the layer
 resample_steps = 50000
 
-buffer = OthelloActivationBuffer(
+buffer = NNsightActivationBuffer(
     data,
     model,
     submodule,
