@@ -38,9 +38,11 @@ def initialize_reconstruction_dict(
     num_features = len(alive_features_F)
 
     on_counter_TF = torch.zeros(num_thresholds, num_features).to(device)
+    counter_T = torch.zeros(num_thresholds).to(device)
     results["on_count"] = on_counter_TF
     results["off_count"] = on_counter_TF.clone()
     results["alive_features"] = alive_features_F
+    results["active_per_token"] = counter_T.clone()
 
     for custom_function in custom_functions:
         results[custom_function.__name__] = {
@@ -48,6 +50,8 @@ def initialize_reconstruction_dict(
             "num_squares": 0,
             "num_true_positive_squares": 0,
             "num_false_positive_squares": 0,
+            "classifiers_per_token": counter_T.clone(),
+            "classified_per_token": counter_T.clone(),
         }
 
     return results
@@ -84,15 +88,17 @@ def aggregate_feature_labels(
     device: torch.device,
 ) -> tuple[dict, dict[str, torch.Tensor]]:
     active_indices_TFBL = activations_FBL > thresholds_TF11
+    active_indices_TFBL111 = einops.repeat(active_indices_TFBL, "T F B L -> T F B L 1 1 1")
 
     active_counts_TF = einops.reduce(active_indices_TFBL, "T F B L -> T F", "sum")
     off_counts_TF = einops.reduce(~active_indices_TFBL, "T F B L -> T F", "sum")
 
+    T, F, B, L = active_indices_TFBL.shape
+    active_indices_per_token_T = einops.reduce(active_indices_TFBL, "T F B L -> T", "sum") / (L)
+
     results["on_count"][:, f_start:f_end] += active_counts_TF
     results["off_count"][:, f_start:f_end] += off_counts_TF
-
-    batch_size = active_indices_TFBL.shape[2]
-    seq_len = active_indices_TFBL.shape[3]
+    results["active_per_token"] += active_indices_per_token_T
 
     additive_boards = {}
 
@@ -102,15 +108,39 @@ def aggregate_feature_labels(
         # NOTE: This will be a very sparse tensor if the L0 is reasonable. TODO: Maybe we can use a sparse tensor?
         # We still have to batch over features in case L0 is large
         feature_labels_TFBLRRC = einops.repeat(
-            feature_labels_TFRRC, "T F R1 R2 C -> T F B L R1 R2 C", B=batch_size, L=seq_len
+            feature_labels_TFRRC, "T F R1 R2 C -> T F B L R1 R2 C", B=B, L=L
         )
+
+        feature_labels_lookup_TFBLRRC = feature_labels_TFBLRRC * active_indices_TFBL111
+
         active_boards_sum_TBLRRC = einops.reduce(
-            feature_labels_TFBLRRC * active_indices_TFBL[:, :, :, :, None, None, None],
+            feature_labels_lookup_TFBLRRC,
             "T F B L R1 R2 C -> T B L R1 R2 C",
             "sum",
         )
 
+        active_features_TFBL = einops.reduce(
+            feature_labels_lookup_TFBLRRC,
+            "T F B L R1 R2 C -> T F B L",
+            "sum",
+        )
+
+        classifiers_per_token_T = (
+            einops.reduce((active_features_TFBL > 0).float(), "T F B L -> T", "sum")
+            / (L)
+            * (F / (f_end - f_start))
+        )
+
+        classified_per_token_T = (
+            einops.reduce(active_features_TFBL, "T F B L -> T", "sum")
+            / (L)
+            * (F / (f_end - f_start))
+        )  # scale by num_features / feature batch size
+        # TODO Am I scaling by the right thing?
+
         additive_boards[custom_function.__name__] = active_boards_sum_TBLRRC
+        results[custom_function.__name__]["classifiers_per_token"] += classifiers_per_token_T
+        results[custom_function.__name__]["classified_per_token"] += classified_per_token_T
 
     return results, additive_boards
 
@@ -151,6 +181,73 @@ def compare_constructed_to_true_boards(
         results[custom_function.__name__]["num_false_positive_squares"] += false_positive_T
 
     return results
+
+
+def normalize_results(results: dict, n_inputs: int, custom_functions: list[Callable]) -> dict:
+    results["active_per_token"] /= n_inputs
+    for custom_function in custom_functions:
+        results[custom_function.__name__]["classifiers_per_token"] /= n_inputs
+        results[custom_function.__name__]["classified_per_token"] /= n_inputs
+
+    return results
+
+
+def calculate_F1_scores(results: dict, custom_functions: list[Callable]) -> dict:
+    for custom_function in custom_functions:
+        num_squares = results[custom_function.__name__]["num_squares"]
+        num_true_positive_squares = results[custom_function.__name__]["num_true_positive_squares"]
+        num_false_positive_squares = results[custom_function.__name__]["num_false_positive_squares"]
+
+        false_negatives = num_squares - num_true_positive_squares - num_false_positive_squares
+
+        precision = num_true_positive_squares / (
+            num_true_positive_squares + num_false_positive_squares
+        )
+        recall = num_true_positive_squares / (num_true_positive_squares + false_negatives)
+
+        # Calculate F1 score
+        f1_scores = 2 * (precision * recall) / (precision + recall)
+        results[custom_function.__name__]["precision"] = precision
+        results[custom_function.__name__]["recall"] = recall
+        results[custom_function.__name__]["f1_score"] = f1_scores
+    return results
+
+
+def print_results(results: dict, custom_functions: list[Callable]):
+    print(f"active_per_token", results["active_per_token"])
+    print(f"Num alive features: {results['alive_features'].shape[0]}")
+
+    for custom_function in custom_functions:
+        print(custom_function.__name__)
+        for key in results[custom_function.__name__]:
+            print(key, results[custom_function.__name__][key])
+
+        best_idx = results[custom_function.__name__]["f1_score"].argmax()
+        f1 = results[custom_function.__name__]["f1_score"][best_idx]
+        precision = results[custom_function.__name__]["precision"][best_idx]
+        recall = results[custom_function.__name__]["recall"][best_idx]
+        num_true_positive_squares = results[custom_function.__name__]["num_true_positive_squares"][
+            best_idx
+        ]
+        num_false_positive_squares = results[custom_function.__name__][
+            "num_false_positive_squares"
+        ][best_idx]
+
+        active_per_token = results["active_per_token"][best_idx]
+        classifiers_per_token = results[custom_function.__name__]["classifiers_per_token"][best_idx]
+        classified_per_token = results[custom_function.__name__]["classified_per_token"][best_idx]
+        percent_active_classifiers = classifiers_per_token / active_per_token
+
+        print(f"\nBest idx: {best_idx}, best F1: {f1}, Precision: {precision}, Recall: {recall}")
+        print(
+            f"Num true positives: {num_true_positive_squares}, Num false positives: {num_false_positive_squares}"
+        )
+        print(
+            f"Classifiers per token: {classifiers_per_token}, Classified per token: {classified_per_token}"
+        )
+        print(
+            f"Active per token: {active_per_token}, percent active classifiers: {percent_active_classifiers}"
+        )
 
 
 # Contains some duplicated logic from eval_sae_as_classifier.py
@@ -254,8 +351,9 @@ def test_board_reconstructions(
             results, custom_functions, constructed_boards, batch_data, device
         )
 
-    for custom_function in custom_functions:
-        print(custom_function.__name__, results[custom_function.__name__])
+    results = normalize_results(results, n_inputs, custom_functions)
+    results = calculate_F1_scores(results, custom_functions)
+    print_results(results, custom_functions)
 
     output_filename = feature_label_file.replace("feature_labels.pkl", "reconstruction.pkl")
     with open(autoencoder_path + output_filename, "wb") as f:
@@ -272,8 +370,10 @@ if __name__ == "__main__":
     # device = "cpu"
     model_path = "models/"
 
-    autoencoder_group_paths = ["autoencoders/group1/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
+    torch.set_printoptions(sci_mode=False, precision=2)
+
+    autoencoder_group_paths = ["autoencoders/chess_layer5/"]
+    # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
     autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
     # autoencoder_group_paths = ["autoencoders/othello_layer0/"]
 
@@ -308,7 +408,7 @@ if __name__ == "__main__":
         data = eval_sae.construct_dataset(othello, custom_functions, n_inputs, device)
 
         for autoencoder_path in folders:
-            print("Testing autoencoder:", autoencoder_path)
+            print("\n\n\nTesting autoencoder:", autoencoder_path)
             feature_label_files = get_all_feature_label_file_names(autoencoder_path)
 
             for feature_label_file in feature_label_files:
