@@ -491,14 +491,17 @@ if __name__ == "__main__":
     # device = "cpu"
     model_path = "models/"
 
-    autoencoder_group_paths = ["autoencoders/group1/"]
+    #autoencoder_group_paths = ["autoencoders/group1/"]
     # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer0/"]
+    #autoencoder_group_paths = ["autoencoders/othello_layer0/"]
+    autoencoder_group_paths = ["autoencoders/group-2024-05-07/"]
+
 
     # NOTE: Suggestion: Use chess_utils.find_dots_indices() as the indexing function for chess models and None for Othello models
 
-    indexing_functions = [None, chess_utils.get_othello_even_list_indices]
-    indexing_functions = [None]  # I'm experimenting with these for Othello
+    #indexing_functions = [None, chess_utils.get_even_list_indices]
+    #indexing_functions = [None]  # I'm experimenting with these for Othello
+    indexing_functions = [chess_utils.find_dots_indices]
 
     # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
     othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
