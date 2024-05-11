@@ -105,6 +105,39 @@ def get_above_below_counts(
     )
 
 
+def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor):
+    classifiers_per_feature_TF = einops.reduce(
+        above_counts_binary_TFRRC, "T F R1 R2 C -> T F", "sum"
+    )
+    nonzero_classifiers_per_feature_TF = (classifiers_per_feature_TF != 0).int()
+    nonzero_classifiers_per_feature_T = einops.reduce(
+        nonzero_classifiers_per_feature_TF, "T F -> T", "sum"
+    )
+    print(f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}")
+
+    classifiers_per_feature_T = einops.reduce(classifiers_per_feature_TF, "T F -> T", "sum")
+
+    print(f"Total classified squares per feature per threshold: {classifiers_per_feature_T}")
+
+    best_idx = torch.argmax(nonzero_classifiers_per_feature_T)
+
+    nonzero_classifiers_per_feature_F = nonzero_classifiers_per_feature_TF[best_idx, ...]
+    total_features = nonzero_classifiers_per_feature_F.size(0)
+    nonzero_features = (nonzero_classifiers_per_feature_F != 0).sum().item()
+    print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
+
+    classifiers_per_feature_F = classifiers_per_feature_TF[best_idx, ...]
+    nonzero_elements_F = classifiers_per_feature_F[classifiers_per_feature_F != 0]
+
+    # Calculate minimum, average, and maximum of nonzero elements
+    min_value = torch.min(nonzero_elements_F)
+    average_value = torch.mean(nonzero_elements_F.float())
+    max_value = torch.max(nonzero_elements_F)
+
+    print("The following are counts of squares classified per classifier per feature:")
+    print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
+
+
 def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tensor:
     new_board = torch.zeros(board.shape[:-1] + (7,), dtype=board.dtype, device=board.device)
 
@@ -182,13 +215,17 @@ def get_timestep_counts(
     actual_class_counts_T = einops.reduce(actual_class_counts_TC, "T C -> T", "sum")
 
     best_idx = torch.argmax(actual_class_counts_T)
-    actual_class_counts_C = actual_class_counts_TC[best_idx, ...] # for a given piece C, count of features active (using the count_as_firing_thresh that yields the highest count) for a single boardstate, sum over all occurences of the piece
+    actual_class_counts_C = actual_class_counts_TC[
+        best_idx, ...
+    ]  # for a given piece C, count of features active (using the count_as_firing_thresh that yields the highest count) for a single boardstate, sum over all occurences of the piece
 
     # print(f"Actual class counts: {actual_class_counts_C}")
 
     class_counts_C[class_counts_C == 0] += 1  # Avoid division by zero
-    coverage2_C = actual_class_counts_C / class_counts_C 
-    coverage2 = coverage2_C.sum().item() / coverage2_C.size(0) # mean count of features active (using the count_as_firing_thresh that yields the highest count) per piece
+    coverage2_C = actual_class_counts_C / class_counts_C
+    coverage2 = coverage2_C.sum().item() / coverage2_C.size(
+        0
+    )  # mean count of features active (using the count_as_firing_thresh that yields the highest count) per piece
 
     print(f"Percent coverage over time dimension: {coverage2}")
 
@@ -302,6 +339,7 @@ def analyze_board_tracker(
 
 if __name__ == "__main__":
     group_folder_name = "autoencoders/othello_layer0/"
+    group_folder_name = "autoencoders/othello_layer5_ef4/"
     folder_names = get_nested_folders(group_folder_name)
 
     device = torch.device("cpu")
@@ -368,6 +406,7 @@ if __name__ == "__main__":
                         significance_threshold,
                     )
                     feature_labels[func_name] = above_counts_binary_TFRRC
+                    analyze_feature_labels(above_counts_binary_TFRRC)
 
                 else:
                     (
