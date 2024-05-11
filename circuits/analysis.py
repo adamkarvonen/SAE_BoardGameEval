@@ -15,7 +15,7 @@ def get_all_results_file_names(folder_name: str) -> list[str]:
     """Get all file names with results.pkl in the given folder."""
     file_names = []
     for file_name in os.listdir(folder_name):
-        if "results.pkl" in file_name:
+        if "results.pkl" in file_name and "reconstruction" not in file_name:
             file_names.append(file_name)
     return file_names
 

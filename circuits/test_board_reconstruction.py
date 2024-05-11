@@ -264,7 +264,7 @@ def test_board_reconstructions(
     for custom_function in custom_functions:
         print(custom_function.__name__, results[custom_function.__name__])
 
-    output_filename = feature_label_file.replace("feature_labels.pkl", "reconstruction_results.pkl")
+    output_filename = feature_label_file.replace("feature_labels.pkl", "reconstruction.pkl")
     with open(autoencoder_path + output_filename, "wb") as f:
         pickle.dump(results, f)
 
