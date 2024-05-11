@@ -148,6 +148,7 @@ def get_feature(
     ae: AutoEncoder,
     device,
 ) -> torch.Tensor:
+
     try:
         x = next(activations).to(device)
     except StopIteration:
