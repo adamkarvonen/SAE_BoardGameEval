@@ -16,7 +16,7 @@ from circuits.othello_buffer import OthelloActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
 from circuits.chess_utils import encode_string
 from circuits.dictionary_learning import ActivationBuffer
-from circuits.dictionary_learning import AutoEncoder, GatedAutoEncoder
+from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer

@@ -182,13 +182,13 @@ def get_timestep_counts(
     actual_class_counts_T = einops.reduce(actual_class_counts_TC, "T C -> T", "sum")
 
     best_idx = torch.argmax(actual_class_counts_T)
-    actual_class_counts_C = actual_class_counts_TC[best_idx, ...]
+    actual_class_counts_C = actual_class_counts_TC[best_idx, ...] # for a given piece C, count of features active (using the count_as_firing_thresh that yields the highest count) for a single boardstate, sum over all occurences of the piece
 
     # print(f"Actual class counts: {actual_class_counts_C}")
 
     class_counts_C[class_counts_C == 0] += 1  # Avoid division by zero
-    coverage2_C = actual_class_counts_C / class_counts_C
-    coverage2 = coverage2_C.sum().item() / coverage2_C.size(0)
+    coverage2_C = actual_class_counts_C / class_counts_C 
+    coverage2 = coverage2_C.sum().item() / coverage2_C.size(0) # mean count of features active (using the count_as_firing_thresh that yields the highest count) per piece
 
     print(f"Percent coverage over time dimension: {coverage2}")
 
@@ -279,7 +279,7 @@ def analyze_board_tracker(
     )
 
     print(
-        f"{func_name} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
+        f"{function} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
     )
     print(above_counts_T)
     print(summary_board_RR)
@@ -287,7 +287,7 @@ def analyze_board_tracker(
     print(coverage_RR)
     print()
     print(
-        f"{func_name} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
+        f"{function} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
     )
     print(classifier_counts_T)
     print(classifier_summary_board_RR)

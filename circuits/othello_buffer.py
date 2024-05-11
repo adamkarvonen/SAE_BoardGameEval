@@ -73,16 +73,6 @@ class OthelloActivationBuffer:
             self.read[idxs] = True
             return self.activations[idxs]
 
-    def text_batch(self, batch_size=None):
-        """
-        Return a list of text
-        """
-        if batch_size is None:
-            batch_size = self.refresh_batch_size
-        try:
-            return [next(self.data) for _ in range(batch_size)]
-        except StopIteration:
-            raise StopIteration("End of data stream reached")
 
     def tokenized_batch(self, batch_size=None):
         """
@@ -103,6 +93,18 @@ class OthelloActivationBuffer:
             return t.tensor([next(self.data) for _ in range(batch_size)], device=self.device)
         except StopIteration:
             raise StopIteration("End of data stream reached")
+        
+    def text_batch(self, batch_size=None):
+        """
+        Return a list of text
+        """
+        # if batch_size is None:
+        #     batch_size = self.refresh_batch_size
+        # try:
+        #     return [next(self.data) for _ in range(batch_size)]
+        # except StopIteration:
+        #     raise StopIteration("End of data stream reached")
+        return self.token_batch(batch_size)
 
     def refresh(self):
         self.activations = self.activations[~self.read]
