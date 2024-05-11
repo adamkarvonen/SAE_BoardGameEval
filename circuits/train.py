@@ -2,7 +2,7 @@ import torch
 import itertools
 import pickle
 
-from circuits.othello_buffer import OthelloActivationBuffer
+from circuits.nnsight_buffer import OthelloActivationBuffer
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
 
