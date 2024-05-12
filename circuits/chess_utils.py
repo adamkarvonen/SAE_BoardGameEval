@@ -547,7 +547,7 @@ def find_spaces_indices(moves_string: str) -> list[int]:
     return indices
 
 
-def get_even_list_indices(tokens_list: list[int]) -> list[int]:
+def get_othello_even_list_indices(tokens_list: list[int]) -> list[int]:
     """"""
     max_len = len(tokens_list)
     return [i for i in range(max_len) if i % 2 == 0]
@@ -742,7 +742,7 @@ def find_custom_indices(
 
 supported_indexing_functions = {
     find_dots_indices.__name__: find_dots_indices,
-    get_even_list_indices.__name__: get_even_list_indices,
+    get_othello_even_list_indices.__name__: get_othello_even_list_indices,
 }
 
 

@@ -497,7 +497,7 @@ if __name__ == "__main__":
 
     # NOTE: Suggestion: Use chess_utils.find_dots_indices() as the indexing function for chess models and None for Othello models
 
-    indexing_functions = [None, chess_utils.get_even_list_indices]
+    indexing_functions = [None, chess_utils.get_othello_even_list_indices]
     indexing_functions = [None]  # I'm experimenting with these for Othello
 
     # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
