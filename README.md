@@ -1,4 +1,4 @@
-I would recommend starting by running `./setup.sh`, then work through `analysis/classifier_analysis.ipynb`, which walks you through some of the results with some commentary. I do need to add some better commentary, but it is something. The evaluation is done with `circuits/eval_sae_as_classifier.py`.
+I would recommend starting by creating a new virtual python environment (I'm using 3.11), running `./setup.sh`, then work through `analysis/classifier_analysis.ipynb`, which walks you through some of the results with some commentary. I do need to add some better commentary, but it is something. The evaluation is done with `circuits/eval_sae_as_classifier.py`.
 
 To train Chess SAEs, run the `setup.sh` script, then run `python circuits/train.py`. At the top of `train.py`, set the bool for Othello (if False, it will train on chess) and set the layer number. The train script should save the results into a folder. Drag that folder into `autoencoders/utils/`, set the layer number in `rename_folder_for_config.ipynb`, and run the Jupyter notebook. This is primarily necessary to add the layer number to `config.json` in every autoencoder.
 
