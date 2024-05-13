@@ -105,7 +105,7 @@ def get_above_below_counts(
     )
 
 
-def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor):
+def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor, print_results: bool = True):
     classifiers_per_feature_TF = einops.reduce(
         above_counts_binary_TFRRC, "T F R1 R2 C -> T F", "sum"
     )
@@ -113,18 +113,14 @@ def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor):
     nonzero_classifiers_per_feature_T = einops.reduce(
         nonzero_classifiers_per_feature_TF, "T F -> T", "sum"
     )
-    print(f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}")
 
     classifiers_per_feature_T = einops.reduce(classifiers_per_feature_TF, "T F -> T", "sum")
-
-    print(f"Total classified squares per feature per threshold: {classifiers_per_feature_T}")
 
     best_idx = torch.argmax(nonzero_classifiers_per_feature_T)
 
     nonzero_classifiers_per_feature_F = nonzero_classifiers_per_feature_TF[best_idx, ...]
     total_features = nonzero_classifiers_per_feature_F.size(0)
     nonzero_features = (nonzero_classifiers_per_feature_F != 0).sum().item()
-    print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
 
     classifiers_per_feature_F = classifiers_per_feature_TF[best_idx, ...]
     nonzero_elements_F = classifiers_per_feature_F[classifiers_per_feature_F != 0]
@@ -134,8 +130,12 @@ def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor):
     average_value = torch.mean(nonzero_elements_F.float())
     max_value = torch.max(nonzero_elements_F)
 
-    print("The following are counts of squares classified per classifier per feature:")
-    print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
+    if print_results:
+        print(f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}")
+        print(f"Total classified squares per feature per threshold: {classifiers_per_feature_T}")
+        print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
+        print("The following are counts of squares classified per classifier per feature:")
+        print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
 
 
 def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tensor:
@@ -196,6 +196,7 @@ def get_timestep_counts(
     above_counts_TFRRC: torch.Tensor,
     piece_state_on_TFRRC: torch.Tensor,
     piece_state_off_counting_TFRRC: torch.Tensor,
+    print_results: bool = True,
 ):
     """Get the counts for the total number of times each piece type was present on a square over all time steps.
     Get the counts for the total number of times a feature classifier predicted a piece type was present on a square
@@ -227,7 +228,8 @@ def get_timestep_counts(
         0
     )  # mean count of features active (using the count_as_firing_thresh that yields the highest count) per piece
 
-    print(f"Percent coverage over time dimension: {coverage2}")
+    if print_results:
+        print(f"Percent coverage over time dimension: {coverage2}")
 
 
 def analyze_board_tracker(
@@ -241,6 +243,8 @@ def analyze_board_tracker(
     significance_threshold: int,
     mine_state: bool = False,
     mask: bool = False,
+    print_results: bool = True,
+    verbose: bool = False,
 ) -> torch.Tensor:
 
     othello = False
@@ -290,15 +294,24 @@ def analyze_board_tracker(
         low_threshold,
         high_threshold,
         significance_threshold=significance_threshold,
+        verbose=verbose,
     )
 
-    print("\nTime coverage for high precision:")
-    get_timestep_counts(above_counts_TFRRC, piece_state_on_TFRRC, piece_state_off_counting_TFRRC)
-    print("\nTime coverage for high precision and recall:")
+    if print_results:
+        print("\nTime coverage for high precision:")
+    get_timestep_counts(
+        above_counts_TFRRC,
+        piece_state_on_TFRRC,
+        piece_state_off_counting_TFRRC,
+        print_results=print_results,
+    )
+    if print_results:
+        print("\nTime coverage for high precision and recall:")
     get_timestep_counts(
         classifier_counts_TFRRC,
         piece_state_on_TFRRC,
         piece_state_off_counting_TFRRC,
+        print_results=print_results,
     )
 
     summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
@@ -317,144 +330,196 @@ def analyze_board_tracker(
         summary_board_RR.shape[0] * summary_board_RR.shape[1] * (class_dict_C.shape[0] - 1)
     )
 
-    print(
-        f"{function} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
-    )
-    print(above_counts_T)
-    print(summary_board_RR)
-    print(class_dict_C)
-    print(coverage_RR)
-    print()
-    print(
-        f"{function} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
-    )
-    print(classifier_counts_T)
-    print(classifier_summary_board_RR)
-    print(classifier_class_dict_C)
-    print(classifier_coverage_RR)
-    print()
+    if print_results:
+        print(
+            f"{function} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
+        )
+        print(above_counts_T)
+        print(summary_board_RR)
+        print(class_dict_C)
+        print(coverage_RR)
+        print()
+        print(
+            f"{function} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
+        )
+        print(classifier_counts_T)
+        print(classifier_summary_board_RR)
+        print(classifier_class_dict_C)
+        print(classifier_coverage_RR)
+        print()
 
     return above_counts_binary_TFRRC
 
 
-if __name__ == "__main__":
-    group_folder_name = "autoencoders/othello_layer0/"
-    group_folder_name = "autoencoders/othello_layer5_ef4/"
-    folder_names = get_nested_folders(group_folder_name)
+def analyze_results_dict(
+    results: dict,
+    output_path: str,
+    device: str = "cuda",
+    high_threshold: float = 0.95,
+    low_threshold: float = 0.1,
+    significance_threshold: int = 10,
+    verbose: bool = False,
+    print_results: bool = True,
+    save_results: bool = True,
+) -> dict:
+    custom_functions = []
 
-    device = torch.device("cpu")
-    high_threshold = 0.95
-    low_threshold = 0.1
-    significance_threshold = 10
+    for key in results:
+        if key in chess_utils.config_lookup:
+            custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
 
-    for folder_name in folder_names:
-        file_names = get_all_results_file_names(folder_name)
-        for file_name in file_names:
-            print()
-            print(folder_name, file_name)
-            with open(folder_name + file_name, "rb") as file:
-                results = pickle.load(file)
-                results = to_device(results, device)
+    results = normalize_tracker(
+        results,
+        "on",
+        custom_functions,
+        device,
+    )
 
-            custom_functions = []
+    results = normalize_tracker(
+        results,
+        "off",
+        custom_functions,
+        device,
+    )
 
-            for key in results:
-                if key in chess_utils.config_lookup:
-                    custom_functions.append(
-                        chess_utils.config_lookup[key].custom_board_state_function
-                    )
+    if print_results:
+        print("Number of alive features:")
+        print(results["on_count"].shape[1])
 
-            results = normalize_tracker(
+        print("Number of inputs:")
+        print(results["hyperparameters"]["n_inputs"])
+
+    thresholds_TF11 = results["hyperparameters"]["thresholds"]
+    feature_labels = {
+        "thresholds": thresholds_TF11,
+        "alive_features": results["alive_features"],
+        "indexing_function": results["hyperparameters"]["indexing_function"],
+    }
+
+    for custom_function in custom_functions:
+        func_name = custom_function.__name__
+        config = chess_utils.config_lookup[func_name]
+        if config.num_rows == 8:
+            above_counts_binary_TFRRC = analyze_board_tracker(
                 results,
+                func_name,
                 "on",
-                custom_functions,
-                device,
-            )
-
-            results = normalize_tracker(
-                results,
                 "off",
-                custom_functions,
                 device,
+                high_threshold,
+                low_threshold,
+                significance_threshold,
+                # mask=True,
+                print_results=print_results,
+                verbose=verbose,
+            )
+            feature_labels[func_name] = above_counts_binary_TFRRC
+            analyze_feature_labels(above_counts_binary_TFRRC)
+
+        else:
+            (
+                above_counts_T,
+                above_counts_binary_TFRRC,
+                above_counts_TFRRC,
+                classifier_counts_T,
+                classifier_counts_binary_TFRRC,
+                classifier_counts_TFRRC,
+            ) = get_above_below_counts(
+                results[func_name]["on_normalized"].clone(),
+                results[func_name]["on"].clone(),
+                results[func_name]["off_normalized"].clone(),
+                results[func_name]["off"].clone(),
+                low_threshold,
+                high_threshold,
+                significance_threshold=significance_threshold,
+                verbose=verbose,
             )
 
-            print("Number of alive features:")
-            print(results["on_count"].shape[1])
+            if print_results:
+                print(f"{func_name} (high precision):")
+                print(above_counts_T)
+                print()
+                print(f"{func_name} (high precision and recall):")
+                print(classifier_counts_T)
+                print()
 
-            print("Number of inputs:")
-            print(results["hyperparameters"]["n_inputs"])
+    if save_results:
+        with open(output_path, "wb") as write_file:
+            pickle.dump(feature_labels, write_file)
 
-            thresholds_TF11 = results["hyperparameters"]["thresholds"]
-            feature_labels = {
-                "thresholds": thresholds_TF11,
-                "alive_features": results["alive_features"],
-                "indexing_function": results["hyperparameters"]["indexing_function"],
-            }
+    return feature_labels
 
-            for custom_function in custom_functions:
-                func_name = custom_function.__name__
-                config = chess_utils.config_lookup[func_name]
-                if config.num_rows == 8:
-                    above_counts_binary_TFRRC = analyze_board_tracker(
-                        results,
-                        func_name,
-                        "on",
-                        "off",
-                        device,
-                        high_threshold,
-                        low_threshold,
-                        significance_threshold,
-                    )
-                    feature_labels[func_name] = above_counts_binary_TFRRC
-                    analyze_feature_labels(above_counts_binary_TFRRC)
 
-                else:
-                    (
-                        above_counts_T,
-                        above_counts_binary_TFRRC,
-                        above_counts_TFRRC,
-                        classifier_counts_T,
-                        classifier_counts_binary_TFRRC,
-                        classifier_counts_TFRRC,
-                    ) = get_above_below_counts(
-                        results[func_name]["on_normalized"].clone(),
-                        results[func_name]["on"].clone(),
-                        results[func_name]["off_normalized"].clone(),
-                        results[func_name]["off"].clone(),
-                        low_threshold,
-                        high_threshold,
-                        significance_threshold=significance_threshold,
-                    )
+def analyze_sae_group(
+    autoencoder_group_paths: list[str],
+    device: str = "cuda",
+    high_threshold: float = 0.95,
+    low_threshold: float = 0.1,
+    significance_threshold: int = 10,
+    verbose: bool = False,
+    print_results: bool = True,
+):
 
-                    print(f"{func_name} (high precision):")
-                    print(above_counts_T)
+    main_results = {}
+
+    for group_folder_name in autoencoder_group_paths:
+
+        main_results[group_folder_name] = []
+
+        folder_names = get_nested_folders(group_folder_name)
+
+        for autoencoder_path in folder_names:
+            file_names = get_all_results_file_names(autoencoder_path)
+            for file_name in file_names:
+                if print_results:
                     print()
-                    print(f"{func_name} (high precision and recall):")
-                    print(classifier_counts_T)
-                    print()
+                    print(autoencoder_path, file_name)
 
-            feature_labels_name = file_name.split(".")[0] + "_feature_labels.pkl"
-            with open(folder_name + feature_labels_name, "wb") as write_file:
-                pickle.dump(feature_labels, write_file)
+                with open(autoencoder_path + file_name, "rb") as file:
+                    results = pickle.load(file)
+                    results = to_device(results, device)
 
-        # results["board_to_piece_state"]["on_piece"] = transform_board_from_piece_color_to_piece(
-        #     results["board_to_piece_state"]["on"]
-        # )
-        # results["on_piece_count"] = results["on_count"]
-        # results = normalize_tracker(results, "on_piece", [chess_utils.board_to_piece_state], device)
+                output_path = autoencoder_path + file_name.replace(
+                    "results.pkl", "feature_labels.pkl"
+                )
 
-        # mine_state_above_counts_T, mine_summary_board, mine_class_dict = analyze_board_tracker(
-        #     results,
-        #     "board_to_piece_state",
-        #     "on_piece",
-        #     device,
-        #     high_threshold,
-        #     significance_threshold,
-        #     mine_state=True,
-        # )
+                analyze_results_dict(
+                    results=results,
+                    output_path=output_path,
+                    device=device,
+                    high_threshold=high_threshold,
+                    low_threshold=low_threshold,
+                    significance_threshold=significance_threshold,
+                    verbose=verbose,
+                    print_results=print_results,
+                )
 
-        # print()
-        # print("Piece state (mine):")
-        # print(mine_state_above_counts_T)
-        # print(mine_summary_board)
-        # print(mine_class_dict)
+            # results["board_to_piece_state"]["on_piece"] = transform_board_from_piece_color_to_piece(
+            #     results["board_to_piece_state"]["on"]
+            # )
+            # results["on_piece_count"] = results["on_count"]
+            # results = normalize_tracker(results, "on_piece", [chess_utils.board_to_piece_state], device)
+
+            # mine_state_above_counts_T, mine_summary_board, mine_class_dict = analyze_board_tracker(
+            #     results,
+            #     "board_to_piece_state",
+            #     "on_piece",
+            #     device,
+            #     high_threshold,
+            #     significance_threshold,
+            #     mine_state=True,
+            # )
+
+            # print()
+            # print("Piece state (mine):")
+            # print(mine_state_above_counts_T)
+            # print(mine_summary_board)
+            # print(mine_class_dict)
+
+
+if __name__ == "__main__":
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
+    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+
+    analyze_sae_group(autoencoder_group_paths)
