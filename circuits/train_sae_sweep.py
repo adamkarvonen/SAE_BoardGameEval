@@ -75,7 +75,7 @@ expansion_factor_ = 2**t.arange(3, 5)
 sparsity_queue_length_ = [10]
 anneal_start_ = t.logspace(start=2, end=4, steps=2, base=10)
 n_sparsity_updates_ = [10]
-initial_sparsity_penalty_ = t.logspace(-1.4,-1.1, 5)
+initial_sparsity_penalty_ = t.logspace(-1.7,-1.2, 5)
 
 param_combinations = itertools.product(
     learning_rate_,
@@ -85,29 +85,29 @@ param_combinations = itertools.product(
     n_sparsity_updates_,
     initial_sparsity_penalty_)
     
-#for i, param_setting in enumerate(param_combinations):
-#    lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = param_setting
-#
-#    trainer_configs.append({
-#        'trainer' : PAnnealTrainer,
-#        'dict_class' : AutoEncoder,
-#        'activation_dim' : d_submodule,
-#        'dict_size' : expansion_factor.item()*d_submodule,
-#        'lr' : lr.item(),
-#        'sparsity_function' : 'Lp^p',
-#        'initial_sparsity_penalty' : sp.item(),
-#        'p_start' : p_start,
-#        'p_end' : p_end,
-#        'anneal_start' : int(anneal_start.item()),
-#        'anneal_end' : anneal_end,
-#        'sparsity_queue_length' : sparsity_queue_length,
-#        'n_sparsity_updates' : n_sparsity_updates,
-#        'warmup_steps' : warmup_steps,
-#        'resample_steps' : resample_steps,
-#        'steps' : steps,
-#        'seed' : seed,
-#        'wandb_name' : f'PAnnealTrainer-chess-{i}',
-#    })
+for i, param_setting in enumerate(param_combinations):
+    lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = param_setting
+
+    trainer_configs.append({
+        'trainer' : PAnnealTrainer,
+        'dict_class' : AutoEncoder,
+        'activation_dim' : d_submodule,
+        'dict_size' : expansion_factor.item()*d_submodule,
+        'lr' : lr.item(),
+        'sparsity_function' : 'Lp^p',
+        'initial_sparsity_penalty' : sp.item(),
+        'p_start' : p_start,
+        'p_end' : p_end,
+        'anneal_start' : int(anneal_start.item()),
+        'anneal_end' : anneal_end,
+        'sparsity_queue_length' : sparsity_queue_length,
+        'n_sparsity_updates' : n_sparsity_updates,
+        'warmup_steps' : warmup_steps,
+        'resample_steps' : resample_steps,
+        'steps' : steps,
+        'seed' : seed,
+        'wandb_name' : f'PAnnealTrainer-chess-{i}',
+    })
 
 
 #param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
@@ -129,22 +129,22 @@ param_combinations = itertools.product(
     
 
 
-param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
-
-for i, param_setting in enumerate(param_combinations):
-    lr, expansion_factor, sp = param_setting
-    trainer_configs.append({
-        'trainer' : GatedSAETrainer,
-        'dict_class' : GatedAutoEncoder,
-        'activation_dim' : d_submodule,
-        'dict_size' : expansion_factor.item()*d_submodule,
-        'lr' : lr.item(),
-        'l1_penalty' : sp.item(),
-        'warmup_steps' : warmup_steps,
-        'resample_steps' : resample_steps,
-        'seed' : seed,
-        'wandb_name' : f'GatedSAETrainer-chess-{i}',
-    })
+#param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
+#
+#for i, param_setting in enumerate(param_combinations):
+#    lr, expansion_factor, sp = param_setting
+#    trainer_configs.append({
+#        'trainer' : GatedSAETrainer,
+#        'dict_class' : GatedAutoEncoder,
+#        'activation_dim' : d_submodule,
+#        'dict_size' : expansion_factor.item()*d_submodule,
+#        'lr' : lr.item(),
+#        'l1_penalty' : sp.item(),
+#        'warmup_steps' : warmup_steps,
+#        'resample_steps' : resample_steps,
+#        'seed' : seed,
+#        'wandb_name' : f'GatedSAETrainer-chess-{i}',
+#    })
 
 
 #for i, param_setting in enumerate(param_combinations):
@@ -173,7 +173,7 @@ for i, param_setting in enumerate(param_combinations):
 
 print(f"len trainer configs: {len(trainer_configs)}")
 
-save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-09/chess-gated/'
+save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-11_chess-p_anneal/'
 #%%
 trainSAE(
     data = activation_buffer, 
