@@ -44,6 +44,12 @@ def print_tensor_memory_usage(tensor):
     print(f"Memory usage: {total_memory} MB")
 
 
+def get_indexing_function_name(indexing_function: Optional[Callable]) -> str:
+    if indexing_function is None:
+        return "None"
+    return indexing_function.__name__
+
+
 # TODO: Make device consistently use torch.device type hint
 def construct_eval_dataset(
     custom_functions: list[Callable],
@@ -335,6 +341,13 @@ def prep_firing_rate_data(
     return data, ae_bundle, pgn_strings, encoded_inputs
 
 
+def get_output_location(
+    autoencoder_path: str, n_inputs: int, indexing_function: Optional[Callable]
+) -> str:
+    indexing_function_name = get_indexing_function_name(indexing_function)
+    return f"{autoencoder_path}indexing_{indexing_function_name}_n_inputs_{n_inputs}_results.pkl"
+
+
 def aggregate_statistics(
     custom_functions: list[Callable],
     autoencoder_path: str,
@@ -345,14 +358,15 @@ def aggregate_statistics(
     model_name: str,
     data: dict,
     indexing_function: Optional[Callable] = None,
-    indexing_function_name: str = "None",
     othello: bool = False,
-):
+    save_results: bool = True,
+) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py."""
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
+    indexing_function_name = get_indexing_function_name(indexing_function)
 
     data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
@@ -443,11 +457,15 @@ def aggregate_statistics(
     results["hyperparameters"] = hyperparameters
     results["eval_results"] = eval_results
 
-    results = to_device(results, "cpu")
+    output_location = get_output_location(autoencoder_path, n_inputs, indexing_function)
 
-    results_file_name = f"indexing_{indexing_function_name}_n_inputs_{n_inputs}_results.pkl"
-    with open(autoencoder_path + results_file_name, "wb") as f:
-        pickle.dump(results, f)
+    if save_results:
+        results = to_device(results, "cpu")
+        with open(output_location, "wb") as f:
+            pickle.dump(results, f)
+        results = to_device(results, device)
+
+    return results
 
 
 def check_if_autoencoder_is_othello(autoencoder_group_path: str) -> bool:
@@ -481,40 +499,47 @@ def construct_dataset(
     return data
 
 
-if __name__ == "__main__":
-    # At these settings, it uses around 3GB of VRAM
-    # VRAM does not scale with n_inputs, only batch_size
-    # You can increase batch_size if you have more VRAM, but it's not a large speedup
-    batch_size = 10
-    n_inputs = 1000
-    device = "cuda"
-    # device = "cpu"
-    model_path = "models/"
-
-    autoencoder_group_paths = ["autoencoders/group1/"]
-    # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer0/"]
-
-    # NOTE: Suggestion: Use chess_utils.find_dots_indices() as the indexing function for chess models and None for Othello models
-
-    indexing_functions = [None, chess_utils.get_othello_even_list_indices]
-    indexing_functions = [None]  # I'm experimenting with these for Othello
-
-    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
-    othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
-
-    param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
-
-    print("Constructing evaluation dataset...")
-
+def get_recommended_custom_functions(othello: bool) -> list[Callable]:
     if not othello:
         custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
     else:
         custom_functions = [
-            # othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
-            othello_utils.games_batch_to_state_stack_BLRRC,
             othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
         ]
+    return custom_functions
+
+
+def get_recommended_indexing_functions(othello: bool) -> list[Callable]:
+    if not othello:
+        indexing_functions = [chess_utils.find_dots_indices]
+    else:
+        indexing_functions = [None]
+    return indexing_functions
+
+
+def eval_sae_group(
+    autoencoder_group_paths: list[str],
+    device: str = "cuda",
+    batch_size: int = 10,
+    n_inputs: int = 1000,
+):
+    """Example autoencoder_group_paths = ['autoencoders/othello_layer5_ef4/'].
+    At batch_size == 10, it uses around 2GB of VRAM.
+    VRAM does not scale with n_inputs, only batch_size.
+
+    Returns a dictionary with autoencoder_group_path as key and a list of output locations as value.
+    """
+    model_path = "unused"
+
+    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
+    othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
+
+    indexing_functions = get_recommended_indexing_functions(othello)
+    custom_functions = get_recommended_custom_functions(othello)
+
+    param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
+
+    print("Constructing evaluation dataset...")
 
     model_name = get_model_name(othello)
     data = construct_dataset(othello, custom_functions, n_inputs, device)
@@ -523,15 +548,16 @@ if __name__ == "__main__":
 
     for autoencoder_group_path, indexing_function in param_combinations:
         print(f"Autoencoder group path: {autoencoder_group_path}")
-        indexing_function_name = "None"
-        if indexing_function is not None:
-            indexing_function_name = indexing_function.__name__
+        indexing_function_name = get_indexing_function_name(indexing_function)
+
         print(f"Indexing function: {indexing_function_name}")
 
         folders = get_nested_folders(autoencoder_group_path)
+
         for autoencoder_path in folders:
             print("Evaluating autoencoder:", autoencoder_path)
-            aggregate_statistics(
+
+            results = aggregate_statistics(
                 custom_functions,
                 autoencoder_path,
                 n_inputs,
@@ -541,6 +567,17 @@ if __name__ == "__main__":
                 model_name,
                 data.copy(),
                 indexing_function=indexing_function,
-                indexing_function_name=indexing_function_name,
                 othello=othello,
             )
+
+
+if __name__ == "__main__":
+    # autoencoder_group_paths = ["autoencoders/group1/", "autoencoders/chess_layer_0_subset/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
+    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+
+    eval_sae_group(
+        autoencoder_group_paths,
+        n_inputs=1000,
+    )

@@ -213,7 +213,7 @@ def calculate_F1_scores(results: dict, custom_functions: list[Callable]) -> dict
     return results
 
 
-def print_results(results: dict, custom_functions: list[Callable]):
+def print_out_results(results: dict, custom_functions: list[Callable]):
     print(f"active_per_token", results["active_per_token"])
     print(f"Num alive features: {results['alive_features'].shape[0]}")
 
@@ -254,14 +254,17 @@ def print_results(results: dict, custom_functions: list[Callable]):
 def test_board_reconstructions(
     custom_functions: list[Callable],
     autoencoder_path: str,
-    feature_label_file: str,
+    feature_labels: dict,
+    output_file: str,
     n_inputs: int,
     batch_size: int,
     device: torch.device,
     model_name: str,
     data: dict,
     othello: bool = False,
-):
+    print_results: bool = False,
+    save_results: bool = True,
+) -> dict:
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
@@ -271,9 +274,6 @@ def test_board_reconstructions(
     )
 
     ae_bundle.buffer = None
-
-    with open(autoencoder_path + feature_label_file, "rb") as f:
-        feature_labels = pickle.load(f)
 
     thresholds_TF11 = feature_labels["thresholds"].to(device)
     alive_features_F = feature_labels["alive_features"].to(device)
@@ -354,31 +354,29 @@ def test_board_reconstructions(
     results["n_inputs"] = n_inputs
     results = normalize_results(results, n_inputs, custom_functions)
     results = calculate_F1_scores(results, custom_functions)
-    print_results(results, custom_functions)
 
-    output_filename = feature_label_file.replace("feature_labels.pkl", "reconstruction.pkl")
-    with open(autoencoder_path + output_filename, "wb") as f:
-        pickle.dump(results, f)
+    if print_results:
+        print_out_results(results, custom_functions)
+
+    if save_results:
+        with open(output_file, "wb") as f:
+            pickle.dump(results, f)
+    return results
 
 
-if __name__ == "__main__":
-    # At these settings, it uses around 3GB of VRAM
-    # VRAM does not scale with n_inputs, only batch_size
-    # You can increase batch_size if you have more VRAM, but it's not a large speedup
-    batch_size = 10
-    n_inputs = 100
-    device = "cuda"
-    # device = "cpu"
-    model_path = "models/"
+def test_sae_group_board_reconstruction(
+    autoencoder_group_paths: list[str],
+    device: str = "cuda",
+    batch_size: int = 10,
+    n_inputs: int = 1000,
+    print_results: bool = False,
+    save_results: bool = True,
+):
+    """Example autoencoder_group_paths = ['autoencoders/othello_layer5_ef4/'].
+    At batch_size == 10, it uses around 2GB of VRAM.
+    VRAM does not scale with n_inputs, only batch_size."""
 
     torch.set_printoptions(sci_mode=False, precision=2)
-
-    autoencoder_group_paths = ["autoencoders/chess_layer5/"]
-    # autoencoder_group_paths = ["autoencoders/othello_layer0/", "autoencoders/othello_layer5_ef4/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
-    # autoencoder_group_paths = ["autoencoders/othello_layer0/"]
-
-    # IMPORTANT NOTE: This is hacky, and means all autoencoders in the group must be for the same game
 
     print("Starting evaluation...")
 
@@ -390,10 +388,21 @@ if __name__ == "__main__":
 
         folders = get_nested_folders(autoencoder_group_path)
 
+        if len(folders) == 0:
+            print("No autoencoders found in this folder.")
+            continue
+
         # All of this fiddling around is to make sure we have the right custom functions
         # So we only have to construct the evaluation dataset once
         first_folder = folders[0]
-        first_feature_labels = get_all_feature_label_file_names(first_folder)[0]
+
+        feature_label_files = get_all_feature_label_file_names(first_folder)
+
+        if len(feature_label_files) == 0:
+            print("No feature label files found in this folder.")
+            continue
+
+        first_feature_labels = feature_label_files[0]
         with open(first_folder + first_feature_labels, "rb") as f:
             feature_labels = pickle.load(f)
 
@@ -409,19 +418,36 @@ if __name__ == "__main__":
         data = eval_sae.construct_dataset(othello, custom_functions, n_inputs, device)
 
         for autoencoder_path in folders:
+
             print("\n\n\nTesting autoencoder:", autoencoder_path)
             feature_label_files = get_all_feature_label_file_names(autoencoder_path)
 
             for feature_label_file in feature_label_files:
                 print("Testing feature label file:", feature_label_file)
+                output_file = feature_label_file.replace("feature_labels.pkl", "reconstruction.pkl")
+
+                with open(autoencoder_path + feature_label_file, "rb") as f:
+                    feature_labels = pickle.load(f)
+
                 test_board_reconstructions(
                     custom_functions,
                     autoencoder_path,
-                    feature_label_file,
+                    feature_labels,
+                    output_file,
                     n_inputs,
                     batch_size,
                     device,
                     model_name,
                     data.copy(),
                     othello=othello,
+                    print_results=print_results,
+                    save_results=save_results,
                 )
+
+
+if __name__ == "__main__":
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
+    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
+    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+
+    test_sae_group_board_reconstruction(autoencoder_group_paths)
