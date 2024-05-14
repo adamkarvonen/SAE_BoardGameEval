@@ -489,10 +489,16 @@ def get_model_name(othello: bool) -> str:
 
 
 def construct_dataset(
-    othello: bool, custom_functions: list[Callable], n_inputs: int, device: str
+    othello: bool,
+    custom_functions: list[Callable],
+    n_inputs: int,
+    device: str,
+    models_path: str = "models/",
 ) -> dict:
     if not othello:
-        data = construct_eval_dataset(custom_functions, n_inputs, device=device)
+        data = construct_eval_dataset(
+            custom_functions, n_inputs, device=device, models_path=models_path
+        )
     else:
         data = construct_othello_dataset(custom_functions, n_inputs, device=device)
 
