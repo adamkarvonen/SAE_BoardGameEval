@@ -65,7 +65,6 @@ def examine_dimension_chess(
     k: int = 30,
     batch_size: int = 4,
     processing_device=torch.device("cpu"),
-    model_path: str = "models/",
 ):
     """I have made the following modifications:
     - We can now pass in a tensor of dimensions to examine, rather than just a single dimension.
@@ -77,9 +76,6 @@ def examine_dimension_chess(
     Much more efficient processing (50x faster) for large dim counts.
     - Processing_device of cpu vs cuda doesn't make much runtime difference, but lowers VRAM usage.
     """
-
-    with open(model_path + "meta.pkl", "rb") as f:
-        meta = pickle.load(f)
 
     assert n_inputs % batch_size == 0
     n_iters = n_inputs // batch_size
@@ -106,11 +102,11 @@ def examine_dimension_chess(
         activations_FBL[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
         tokens_BL[i * batch_size : (i + 1) * batch_size, :] = cur_tokens
 
-    decoded_tokens_BL = []
+    encoded_tokens_BL = []
 
     for input_L in tokens_BL:
         input_list_L = input_L.tolist()
-        decoded_tokens_BL.append(chess_utils.decode_list(meta, input_list_L))
+        encoded_tokens_BL.append(input_list_L)
 
     per_dim_stats = {}
     idxs_dict = {}
@@ -132,7 +128,7 @@ def examine_dimension_chess(
             idxs = idxs_dict[tok]
             token_mean_acts[tok] = individual_acts_BL[idxs].mean().item()
         top_tokens = sorted(token_mean_acts.items(), key=lambda x: x[1], reverse=True)[:k]
-        top_tokens = [(chess_utils.decode_list(meta, [tok]), act) for tok, act in top_tokens]
+        top_tokens = [(tok, act) for tok, act in top_tokens]
 
         flattened_acts = rearrange(individual_acts_BL, "b n -> (b n)")
         topk_indices = torch.argsort(flattened_acts, dim=0, descending=True)[:k]
@@ -145,7 +141,7 @@ def examine_dimension_chess(
             for batch_idx, token_id in zip(batch_indices, token_indices)
         ]
         individual_tokens = [
-            decoded_tokens_BL[batch_idx][: token_idx + 1]
+            encoded_tokens_BL[batch_idx][: token_idx + 1]
             for batch_idx, token_idx in zip(batch_indices, token_indices)
         ]
 
@@ -158,7 +154,7 @@ def examine_dimension_chess(
         dim_stats["top_contexts"] = top_contexts
         dim_stats["top_tokens"] = top_tokens
         dim_stats["top_affected"] = top_affected
-        dim_stats["decoded_tokens"] = individual_tokens
+        dim_stats["encoded_tokens"] = individual_tokens
         dim_stats["activations"] = individual_acts_BL
 
         per_dim_stats[dim.item()] = dim_stats
