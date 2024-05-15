@@ -162,7 +162,9 @@ def initialize_results_dict(
             num_thresholds, num_features, config.num_rows, config.num_cols, num_classes
         ).to(device)
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
-        results[custom_function.__name__]["off"] = on_tracker_TFRRC.clone()
+
+        all_tracker_RRC = torch.zeros(config.num_rows, config.num_cols, num_classes).to(device)
+        results[custom_function.__name__]["all"] = all_tracker_RRC
 
     return results
 
@@ -222,7 +224,6 @@ def aggregate_batch_statistics(
 
     for custom_function in custom_functions:
         on_tracker_TFRRC = results[custom_function.__name__]["on"]
-        off_tracker_FTRRC = results[custom_function.__name__]["off"]
 
         boards_BLRRC = batch_data[custom_function.__name__]
         boards_TFBLRRC = einops.repeat(
@@ -232,24 +233,18 @@ def aggregate_batch_statistics(
             T=thresholds_TF11.shape[0],
         )
 
-        # TODO The next 2 operations consume almost all of the compute. I don't think it will work,
-        # but maybe we can only do 1 of these operations?
+        all_boards_sum_RRC = einops.reduce(boards_BLRRC, "B L R1 R2 C -> R1 R2 C", "sum")
+
         active_boards_sum_TFRRC = einops.reduce(
             boards_TFBLRRC * active_indices_TFBL[:, :, :, :, None, None, None],
             "T F B L R1 R2 C -> T F R1 R2 C",
             "sum",
         )
-        off_boards_sum_TFRRC = einops.reduce(
-            boards_TFBLRRC * ~active_indices_TFBL[:, :, :, :, None, None, None],
-            "T F B L R1 R2 C -> T F R1 R2 C",
-            "sum",
-        )
 
         on_tracker_TFRRC[:, f_start:f_end, :, :, :] += active_boards_sum_TFRRC
-        off_tracker_FTRRC[:, f_start:f_end, :, :, :] += off_boards_sum_TFRRC
 
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
-        results[custom_function.__name__]["off"] = off_tracker_FTRRC
+        results[custom_function.__name__]["all"] += all_boards_sum_RRC
 
     return results
 

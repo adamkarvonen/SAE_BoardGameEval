@@ -351,6 +351,23 @@ def analyze_board_tracker(
     return above_counts_binary_TFRRC
 
 
+def add_off_tracker(results: dict, custom_functions: list[Callable], device: str) -> dict:
+
+    for custom_function in custom_functions:
+        func_name = custom_function.__name__
+        off_tracker_TFRRC = torch.zeros_like(results[func_name]["on"])
+        all_tracker_RRC = results[func_name]["all"]
+
+        T, F, R1, R2, C = off_tracker_TFRRC.shape
+
+        all_tracker_TFRRC = einops.repeat(all_tracker_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
+
+        off_tracker_TFRRC = all_tracker_TFRRC - results[func_name]["on"]
+        results[func_name]["off"] = off_tracker_TFRRC
+
+    return results
+
+
 def analyze_results_dict(
     results: dict,
     output_path: str,
@@ -367,6 +384,8 @@ def analyze_results_dict(
     for key in results:
         if key in chess_utils.config_lookup:
             custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
+
+    results = add_off_tracker(results, custom_functions, device)
 
     results = normalize_tracker(
         results,
