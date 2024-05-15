@@ -1,3 +1,4 @@
+from collections import deque
 from tqdm import tqdm
 import pickle
 import torch
@@ -9,6 +10,7 @@ import os
 import itertools
 import json
 import time
+from joblib import Parallel, delayed
 
 from circuits.utils import (
     get_ae_bundle,
@@ -39,6 +41,12 @@ from IPython import embed
 # (rangell): feel free to change these if it doesn't make sense or fall in line with the spirit of the key
 # D = activation dimension
 # A = all (as opposed to batch B)
+
+
+# Global resources
+N_GPUS = 4
+N_JOBS = 4
+RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)] * (N_JOBS // N_GPUS))
 
 
 def print_tensor_memory_usage(tensor):
@@ -416,7 +424,6 @@ def aggregate_statistics(
     autoencoder_path: str,
     n_inputs: int,
     batch_size: int,
-    device: torch.device,
     model_path: str,
     model_name: str,
     data: dict,
@@ -429,6 +436,10 @@ def aggregate_statistics(
     As an example of desired behavior, view tests/test_classifier_eval.py.
     precomputed will precompute the entire dataset and model activations and store them in memory.
     Faster, but uses far more VRAM."""
+
+    # grab the next available device from shared stack
+    device = RESOURCE_STACK.pop()
+    data = to_device(data, device)
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
@@ -539,6 +550,9 @@ def aggregate_statistics(
             pickle.dump(results, f)
         results = to_device(results, device)
 
+    # put the device back on the shared stack
+    RESOURCE_STACK.append(device)
+
     return results
 
 
@@ -644,21 +658,35 @@ def eval_sae_group(
 
         folders = get_nested_folders(autoencoder_group_path)
 
-        for autoencoder_path in folders:
-            print("Evaluating autoencoder:", autoencoder_path)
+        #for autoencoder_path in folders:
+        #    print("Evaluating autoencoder:", autoencoder_path)
 
-            results = aggregate_statistics(
+        #    results = aggregate_statistics(
+        #        custom_functions,
+        #        autoencoder_path,
+        #        n_inputs,
+        #        batch_size,
+        #        device,
+        #        model_path,
+        #        model_name,
+        #        data.copy(),
+        #        indexing_function=indexing_function,
+        #        othello=othello,
+        #    )
+
+        Parallel(n_jobs=N_JOBS, require="sharedmem")(delayed(aggregate_statistics)(
                 custom_functions,
                 autoencoder_path,
                 n_inputs,
                 batch_size,
-                device,
                 model_path,
                 model_name,
                 data.copy(),
                 indexing_function=indexing_function,
                 othello=othello,
-            )
+        ) for autoencoder_path in folders)
+
+    print("\n\n\n\n\n\n\n\n\n\n")
 
 
 if __name__ == "__main__":
