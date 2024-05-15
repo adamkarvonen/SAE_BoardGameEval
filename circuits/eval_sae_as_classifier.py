@@ -8,10 +8,13 @@ import math
 import os
 import itertools
 import json
+import time
 
 from circuits.utils import (
     get_ae_bundle,
     collect_activations_batch,
+    get_model_activations,
+    get_feature_activations_batch,
     get_nested_folders,
     get_firing_features,
     to_device,
@@ -32,6 +35,10 @@ from IPython import embed
 # T = thresholds
 # R = rows (or cols)
 # C = classes for one hot encoding
+#
+# (rangell): feel free to change these if it doesn't make sense or fall in line with the spirit of the key
+# D = activation dimension
+# A = all (as opposed to batch B)
 
 
 def print_tensor_memory_usage(tensor):
@@ -287,7 +294,7 @@ def normalize_tracker(
 # TODO Write a unit test for this function
 def apply_indexing_function(
     pgn_strings: list[str],
-    activations_FBL,
+    activations_FBL: torch.Tensor,
     batch_data: dict[str, torch.Tensor],
     device: torch.device,
     indexing_function: Callable,
@@ -302,11 +309,56 @@ def apply_indexing_function(
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
+
     custom_indices_BI = torch.tensor(custom_indices).to(device)
     custom_indices_FBI = einops.repeat(
         custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
     )
 
+    activations_FBI = torch.gather(activations_FBL, 2, custom_indices_FBI)
+
+    for custom_function in batch_data:
+        boards_BLRRC = batch_data[custom_function]
+        rows = boards_BLRRC.shape[2]
+        classes = boards_BLRRC.shape[4]
+        custom_indices_BIRRC = einops.repeat(
+            custom_indices_BI, "B I -> B I R1 R2 C", R1=rows, R2=rows, C=classes
+        )
+        boards_BIRRC = torch.gather(boards_BLRRC, 1, custom_indices_BIRRC)
+        batch_data[custom_function] = boards_BIRRC
+
+    return activations_FBI, batch_data
+
+
+def compute_custom_indices(
+    pgn_strings: list[str],
+    indexing_function: Callable,
+    num_active_features: int,
+    device: str,
+) -> torch.Tensor:
+    """ TODO(rangell): """
+    max_indices = 20
+
+    custom_indices = []
+    for pgn in pgn_strings:
+        dots_indices = indexing_function(pgn)
+        custom_indices.append(dots_indices[:max_indices])
+
+    custom_indices_AI = torch.tensor(custom_indices).to(device)
+    return custom_indices_AI
+
+
+def filter_data_by_custom_indices(
+    activations_FBL: torch.Tensor,
+    batch_data: dict[str, torch.Tensor],
+    custom_indices_BI: torch.Tensor,
+    device: torch.device,
+) -> tuple[torch.Tensor, dict]:
+    """ TODO(rangell): """
+
+    custom_indices_FBI = einops.repeat(
+        custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
+    )
     activations_FBI = torch.gather(activations_FBL, 2, custom_indices_FBI)
 
     for custom_function in batch_data:
@@ -331,7 +383,7 @@ def prep_firing_rate_data(
     device: torch.device,
     n_inputs: int,
     othello: bool = False,
-) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
+) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor, torch.Tensor]:
     """Moves data from the data dictionary into the NNsight activation buffer."""
     for key in data:
         if key == "decoded_inputs" or key == "encoded_inputs":
@@ -350,7 +402,10 @@ def prep_firing_rate_data(
         autoencoder_path, device, firing_rate_data, batch_size, model_path, model_name, n_ctxs
     )
 
-    return data, ae_bundle, pgn_strings, encoded_inputs
+    encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
+    model_activations = get_model_activations(ae_bundle, encoded_inputs_AL)
+
+    return data, ae_bundle, pgn_strings, model_activations, encoded_inputs
 
 
 def get_output_location(
@@ -381,7 +436,7 @@ def aggregate_statistics(
     feature_batch_size = batch_size
     indexing_function_name = get_indexing_function_name(indexing_function)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
+    data, ae_bundle, pgn_strings, model_activations_ALD, encoded_inputs = prep_firing_rate_data(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
@@ -390,6 +445,11 @@ def aggregate_statistics(
     alive_features_F, max_activations_F = get_firing_features(
         ae_bundle, firing_rate_n_inputs, batch_size, device
     )
+
+    if indexing_function is not None:
+        custom_indices_AI = compute_custom_indices(
+            pgn_strings, indexing_function, alive_features_F.shape[0], device
+        )
 
     eval_results = evaluate(
         ae_bundle.ae,
@@ -419,29 +479,27 @@ def aggregate_statistics(
     thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
     results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_F, device)
-
+    
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
         pgn_strings_BL = pgn_strings[start:end]
-        encoded_inputs_BL = encoded_inputs[start:end]
-        encoded_inputs_BL = torch.tensor(encoded_inputs_BL).to(device)
-
         batch_data = get_data_batch(
             data, pgn_strings_BL, start, end, custom_functions, device, precomputed=precomputed
         )
 
-        all_activations_FBL, encoded_token_inputs = collect_activations_batch(
-            ae_bundle, encoded_inputs_BL, alive_features_F
+        model_activations_BLD = model_activations_ALD[start:end]
+        all_activations_FBL = get_feature_activations_batch(
+            ae_bundle, model_activations_BLD, alive_features_F
         )
 
         if indexing_function is not None:
-            all_activations_FBL, batch_data = apply_indexing_function(
-                pgn_strings[start:end], all_activations_FBL, batch_data, device, indexing_function
+            custom_indices_BI = custom_indices_AI[start:end]
+            all_activations_FBL, batch_data = filter_data_by_custom_indices(
+                all_activations_FBL, batch_data, custom_indices_BI, device
             )
 
         results = update_all_tracker(results, custom_functions, batch_data, device)
-
         # For thousands of features, this would be many GB of memory. So, we minibatch.
         for feature in range(num_feature_iters):
             f_start = feature * feature_batch_size
@@ -607,8 +665,10 @@ if __name__ == "__main__":
     autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
     autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
     autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+    autoencoder_group_paths = ["autoencoders/group-2024-05-07/"]
 
     eval_sae_group(
         autoencoder_group_paths,
+        batch_size=100,
         n_inputs=1000,
     )

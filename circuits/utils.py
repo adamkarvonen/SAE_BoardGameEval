@@ -220,6 +220,34 @@ def collect_activations_batch(
     return cur_activations_FBL, cur_tokens.value[0]
 
 
+@torch.no_grad()
+def get_model_activations(
+    ae_bundle: AutoEncoderBundle,
+    inputs_BL: torch.Tensor,
+) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
+    with ae_bundle.model.trace(
+        inputs_BL, invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
+    ):
+        cur_activations = ae_bundle.submodule.output
+        if type(cur_activations.shape) == tuple:
+            cur_activations = cur_activations[0].save()
+    return cur_activations
+
+
+@torch.no_grad()
+def get_feature_activations_batch(
+    ae_bundle: AutoEncoderBundle,
+    model_activations_BLD: torch.Tensor,
+    dims: Int[Tensor, "num_dims"],
+) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
+    feature_activations = ae_bundle.ae.encode(model_activations_BLD)
+    feature_activations_BLF = feature_activations[:, :, dims]
+    feature_activations_FBL = rearrange(
+        feature_activations_BLF, "b n d -> d b n"
+    )  # Shape: (dim_count, batch_size, max_length)
+    return feature_activations_FBL
+
+
 def get_nested_folders(path: str) -> list[str]:
     """Get a list of folders nested one level deep in the given path which contain an ae.pt file"""
     folder_names = []
