@@ -317,6 +317,7 @@ def apply_indexing_function(
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
+
     custom_indices_BI = torch.tensor(custom_indices).to(device)
     custom_indices_FBI = einops.repeat(
         custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
@@ -343,7 +344,7 @@ def compute_custom_indices(
     num_active_features: int,
     device: str,
 ) -> torch.Tensor:
-    """TODO(rangell):"""
+    """ TODO(rangell): """
     max_indices = 20
 
     custom_indices = []
@@ -361,7 +362,7 @@ def filter_data_by_custom_indices(
     custom_indices_BI: torch.Tensor,
     device: torch.device,
 ) -> tuple[torch.Tensor, dict]:
-    """TODO(rangell):"""
+    """ TODO(rangell): """
 
     custom_indices_FBI = einops.repeat(
         custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
@@ -390,7 +391,7 @@ def prep_firing_rate_data(
     device: torch.device,
     n_inputs: int,
     othello: bool = False,
-) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
+) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor, torch.Tensor]:
     """Moves data from the data dictionary into the NNsight activation buffer."""
     for key in data:
         if key == "decoded_inputs" or key == "encoded_inputs":
@@ -409,7 +410,10 @@ def prep_firing_rate_data(
         autoencoder_path, device, firing_rate_data, batch_size, model_path, model_name, n_ctxs
     )
 
-    return data, ae_bundle, pgn_strings, encoded_inputs
+    encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
+    model_activations = get_model_activations(ae_bundle, encoded_inputs_AL)
+
+    return data, ae_bundle, pgn_strings, model_activations, encoded_inputs
 
 
 def get_output_location(
@@ -445,7 +449,7 @@ def aggregate_statistics(
     feature_batch_size = batch_size
     indexing_function_name = get_indexing_function_name(indexing_function)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
+    data, ae_bundle, pgn_strings, model_activations_ALD, encoded_inputs = prep_firing_rate_data(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
@@ -484,7 +488,7 @@ def aggregate_statistics(
     thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
     results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_F, device)
-
+    
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
@@ -510,6 +514,7 @@ def aggregate_statistics(
             )
 
         results = update_all_tracker(results, custom_functions, batch_data, device)
+
         # For thousands of features, this would be many GB of memory. So, we minibatch.
         for feature in range(num_feature_iters):
             f_start = feature * feature_batch_size
