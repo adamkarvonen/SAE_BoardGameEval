@@ -106,6 +106,7 @@ expansion_factor_ = 2**t.arange(3, 5)
 sparsity_queue_length_ = [10]
 anneal_start_ = t.logspace(start=3, end=4, steps=2, base=10)
 n_sparsity_updates_ = [10]
+<<<<<<< HEAD
 # old: initial_sparsity_penalty_ = t.logspace(-1.7,-1.2, 5)
 
 
@@ -219,6 +220,7 @@ for i, param_setting in enumerate(param_combinations):
 print(f"len trainer configs: {len(trainer_configs)}")
 
 save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-14_chess-gated_anneal/'
+
 #%%
 trainSAE(
     data = activation_buffer, 
