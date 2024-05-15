@@ -111,36 +111,37 @@ def aggregate_feature_labels(
             feature_labels_TFRRC, "T F R1 R2 C -> T F B L R1 R2 C", B=B, L=L
         )
 
-        feature_labels_lookup_TFBLRRC = feature_labels_TFBLRRC * active_indices_TFBL111
-
         active_boards_sum_TBLRRC = einops.reduce(
-            feature_labels_lookup_TFBLRRC,
+            feature_labels_TFBLRRC * active_indices_TFBL111,
             "T F B L R1 R2 C -> T B L R1 R2 C",
             "sum",
         )
 
-        active_features_TFBL = einops.reduce(
-            feature_labels_lookup_TFBLRRC,
-            "T F B L R1 R2 C -> T F B L",
-            "sum",
-        )
-
-        classifiers_per_token_T = (
-            einops.reduce((active_features_TFBL > 0).float(), "T F B L -> T", "sum")
-            / (L)
-            * (F / (f_end - f_start))
-        )
-
-        classified_per_token_T = (
-            einops.reduce(active_features_TFBL, "T F B L -> T", "sum")
-            / (L)
-            * (F / (f_end - f_start))
-        )  # scale by num_features / feature batch size
-        # TODO Am I scaling by the right thing?
-
         additive_boards[custom_function.__name__] = active_boards_sum_TBLRRC
-        results[custom_function.__name__]["classifiers_per_token"] += classifiers_per_token_T
-        results[custom_function.__name__]["classified_per_token"] += classified_per_token_T
+
+        # The following code would be useful to look at the number of classifiers and classified per token on a per turn basis
+        # As it currently is, analysis.py could give similar results in much less time
+        # active_features_TFBL = einops.reduce(
+        #     feature_labels_lookup_TFBLRRC,
+        #     "T F B L R1 R2 C -> T F B L",
+        #     "sum",
+        # )
+
+        # classifiers_per_token_T = (
+        #     einops.reduce((active_features_TFBL > 0).float(), "T F B L -> T", "sum")
+        #     / (L)
+        #     * (F / (f_end - f_start))
+        # )
+
+        # classified_per_token_T = (
+        #     einops.reduce(active_features_TFBL, "T F B L -> T", "sum")
+        #     / (L)
+        #     * (F / (f_end - f_start))
+        # )  # scale by num_features / feature batch size
+        # # TODO Am I scaling by the right thing?
+
+        # results[custom_function.__name__]["classifiers_per_token"] += classifiers_per_token_T
+        # results[custom_function.__name__]["classified_per_token"] += classified_per_token_T
 
     return results, additive_boards
 
@@ -264,6 +265,7 @@ def test_board_reconstructions(
     othello: bool = False,
     print_results: bool = False,
     save_results: bool = True,
+    precomputed: bool = True,
 ) -> dict:
 
     torch.set_grad_enabled(False)
@@ -308,7 +310,7 @@ def test_board_reconstructions(
         encoded_inputs_BL = torch.tensor(encoded_inputs_BL).to(device)
 
         batch_data = eval_sae.get_data_batch(
-            data, pgn_strings_BL, start, end, custom_functions, device
+            data, pgn_strings_BL, start, end, custom_functions, device, precomputed=precomputed
         )
 
         all_activations_FBL, encoded_token_inputs = collect_activations_batch(
