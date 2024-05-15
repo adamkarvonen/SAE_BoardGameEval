@@ -355,6 +355,9 @@ def add_off_tracker(results: dict, custom_functions: list[Callable], device: str
 
     for custom_function in custom_functions:
         func_name = custom_function.__name__
+        # Maintain backwards compatibility
+        if "off" in results[func_name] and "all" not in results[func_name]:
+            return results
         off_tracker_TFRRC = torch.zeros_like(results[func_name]["on"])
         all_tracker_RRC = results[func_name]["all"]
 
