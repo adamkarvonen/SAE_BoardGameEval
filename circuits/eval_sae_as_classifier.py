@@ -233,8 +233,6 @@ def aggregate_batch_statistics(
             T=thresholds_TF11.shape[0],
         )
 
-        all_boards_sum_RRC = einops.reduce(boards_BLRRC, "B L R1 R2 C -> R1 R2 C", "sum")
-
         active_boards_sum_TFRRC = einops.reduce(
             boards_TFBLRRC * active_indices_TFBL[:, :, :, :, None, None, None],
             "T F B L R1 R2 C -> T F R1 R2 C",
@@ -244,6 +242,20 @@ def aggregate_batch_statistics(
         on_tracker_TFRRC[:, f_start:f_end, :, :, :] += active_boards_sum_TFRRC
 
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
+
+    return results
+
+
+def update_all_tracker(
+    results: dict,
+    custom_functions: list[Callable],
+    batch_data: dict[str, torch.Tensor],
+    device: torch.device,
+) -> dict:
+
+    for custom_function in custom_functions:
+        boards_BLRRC = batch_data[custom_function.__name__]
+        all_boards_sum_RRC = einops.reduce(boards_BLRRC, "B L R1 R2 C -> R1 R2 C", "sum")
         results[custom_function.__name__]["all"] += all_boards_sum_RRC
 
     return results
@@ -427,6 +439,9 @@ def aggregate_statistics(
             all_activations_FBL, batch_data = apply_indexing_function(
                 pgn_strings[start:end], all_activations_FBL, batch_data, device, indexing_function
             )
+
+        results = update_all_tracker(results, custom_functions, batch_data, device)
+
         # For thousands of features, this would be many GB of memory. So, we minibatch.
         for feature in range(num_feature_iters):
             f_start = feature * feature_batch_size
