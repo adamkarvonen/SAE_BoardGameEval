@@ -454,6 +454,8 @@ def analyze_results_dict(
                 verbose=verbose,
             )
 
+            feature_labels[func_name] = above_counts_binary_TFRRC
+
             if print_results:
                 print(f"{func_name} (high precision):")
                 print(above_counts_T)
