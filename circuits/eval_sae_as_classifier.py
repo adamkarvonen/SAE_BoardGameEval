@@ -51,12 +51,13 @@ def get_indexing_function_name(indexing_function: Optional[Callable]) -> str:
 
 
 # TODO: Make device consistently use torch.device type hint
-def construct_eval_dataset(
+def construct_chess_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
     models_path: str = "models/",
     max_str_length: int = 256,
     device: str = "cpu",
+    precompute_dataset: bool = True,
 ) -> dict:
     dataset = load_dataset("adamkarvonen/chess_sae_individual_games_filtered", streaming=False)
 
@@ -79,15 +80,14 @@ def construct_eval_dataset(
     data["decoded_inputs"] = pgn_strings
     data["encoded_inputs"] = encoded_inputs
 
-    for function in custom_functions:
-        func_name = function.__name__
+    if not precompute_dataset:
+        return data
+
+    state_stack_dict_BLRR = chess_utils.create_state_stacks(pgn_strings, custom_functions, device)
+
+    for func_name in state_stack_dict_BLRR:
         config = chess_utils.config_lookup[func_name]
-        if config.num_rows == 8:
-            continue
-        func_name = config.custom_board_state_function.__name__
-        state_stack_BLRR = chess_utils.create_state_stacks(
-            pgn_strings, config.custom_board_state_function
-        ).to(device)
+        state_stack_BLRR = state_stack_dict_BLRR[func_name]
 
         assert state_stack_BLRR.shape[0] == len(pgn_strings)
         assert state_stack_BLRR.shape[1] == max_str_length
@@ -107,8 +107,8 @@ def construct_othello_dataset(
     n_inputs: int,
     max_str_length: int = 59,
     device: str = "cpu",
+    precompute_dataset: bool = True,
 ) -> dict:
-    """Because we are dealing with 8x8 state stacks, I won't bother creating any state stacks in advance."""
     dataset = load_dataset("adamkarvonen/othello_45MB_games", streaming=False)
     encoded_othello_inputs = []
     decoded_othello_inputs = []
@@ -123,6 +123,13 @@ def construct_othello_dataset(
     data = {}
     data["encoded_inputs"] = encoded_othello_inputs
     data["decoded_inputs"] = decoded_othello_inputs
+
+    if not precompute_dataset:
+        return data
+
+    for custom_function in custom_functions:
+        func_name = custom_function.__name__
+        data[func_name] = custom_function(decoded_othello_inputs)
 
     return data
 
@@ -155,7 +162,9 @@ def initialize_results_dict(
             num_thresholds, num_features, config.num_rows, config.num_cols, num_classes
         ).to(device)
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
-        results[custom_function.__name__]["off"] = on_tracker_TFRRC.clone()
+
+        all_tracker_RRC = torch.zeros(config.num_rows, config.num_cols, num_classes).to(device)
+        results[custom_function.__name__]["all"] = all_tracker_RRC
 
     return results
 
@@ -167,28 +176,25 @@ def get_data_batch(
     end: int,
     custom_functions: list[Callable],
     device: torch.device,
+    precomputed: bool = True,
 ) -> dict:
-    """If the custom function returns a board of 8 x 8 x num_classes, we construct it on the fly.
-    In this case, creating the state stack is very cheap compared to doing the statistics aggregation.
-    Additionally, a full board state stack very quickly grows to dozens of gigabytes, so we don't want to store it.
-
-    However, if the custom function returns a 1 x 1 x num_classes tensor, creating the state stack is comparable to the statistics aggregation.
-    And memory usage is low, so it makes sense to compute the state stack once and store it."""
     batch_data = {}
-    for custom_function in custom_functions:
-        config = chess_utils.config_lookup[custom_function.__name__]
-        if custom_function.__name__ in othello_utils.othello_functions:
-            batch_data[custom_function.__name__] = custom_function(inputs_BL).to(device)
-        else:
-            if config.num_rows == 8:
-                state_stacks = chess_utils.create_state_stacks(inputs_BL, custom_function).to(
-                    device
-                )
-                batch_data[custom_function.__name__] = chess_utils.state_stack_to_one_hot(
-                    config, device, state_stacks
-                )
-            else:
-                batch_data[custom_function.__name__] = data[custom_function.__name__][start:end]
+    if precomputed:
+        for func_name in data:
+            batch_data[func_name] = data[func_name][start:end]
+        return batch_data
+
+    # Else construct it on the fly
+    state_stacks_dict_BLRR = chess_utils.create_state_stacks(inputs_BL, custom_functions, device)
+
+    for func_name in state_stacks_dict_BLRR:
+        config = chess_utils.config_lookup[func_name]
+        state_stacks_BLRR = state_stacks_dict_BLRR[func_name]
+
+        batch_data[func_name] = chess_utils.state_stack_to_one_hot(
+            config, device, state_stacks_BLRR
+        )
+
     return batch_data
 
 
@@ -218,7 +224,6 @@ def aggregate_batch_statistics(
 
     for custom_function in custom_functions:
         on_tracker_TFRRC = results[custom_function.__name__]["on"]
-        off_tracker_FTRRC = results[custom_function.__name__]["off"]
 
         boards_BLRRC = batch_data[custom_function.__name__]
         boards_TFBLRRC = einops.repeat(
@@ -228,24 +233,18 @@ def aggregate_batch_statistics(
             T=thresholds_TF11.shape[0],
         )
 
-        # TODO The next 2 operations consume almost all of the compute. I don't think it will work,
-        # but maybe we can only do 1 of these operations?
+        all_boards_sum_RRC = einops.reduce(boards_BLRRC, "B L R1 R2 C -> R1 R2 C", "sum")
+
         active_boards_sum_TFRRC = einops.reduce(
             boards_TFBLRRC * active_indices_TFBL[:, :, :, :, None, None, None],
             "T F B L R1 R2 C -> T F R1 R2 C",
             "sum",
         )
-        off_boards_sum_TFRRC = einops.reduce(
-            boards_TFBLRRC * ~active_indices_TFBL[:, :, :, :, None, None, None],
-            "T F B L R1 R2 C -> T F R1 R2 C",
-            "sum",
-        )
 
         on_tracker_TFRRC[:, f_start:f_end, :, :, :] += active_boards_sum_TFRRC
-        off_tracker_FTRRC[:, f_start:f_end, :, :, :] += off_boards_sum_TFRRC
 
         results[custom_function.__name__]["on"] = on_tracker_TFRRC
-        results[custom_function.__name__]["off"] = off_tracker_FTRRC
+        results[custom_function.__name__]["all"] += all_boards_sum_RRC
 
     return results
 
@@ -321,6 +320,7 @@ def prep_firing_rate_data(
     n_inputs: int,
     othello: bool = False,
 ) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
+    """Moves data from the data dictionary into the NNsight activation buffer."""
     for key in data:
         if key == "decoded_inputs" or key == "encoded_inputs":
             continue
@@ -360,6 +360,7 @@ def aggregate_statistics(
     indexing_function: Optional[Callable] = None,
     othello: bool = False,
     save_results: bool = True,
+    precomputed: bool = True,
 ) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py."""
@@ -414,7 +415,9 @@ def aggregate_statistics(
         encoded_inputs_BL = encoded_inputs[start:end]
         encoded_inputs_BL = torch.tensor(encoded_inputs_BL).to(device)
 
-        batch_data = get_data_batch(data, pgn_strings_BL, start, end, custom_functions, device)
+        batch_data = get_data_batch(
+            data, pgn_strings_BL, start, end, custom_functions, device, precomputed=precomputed
+        )
 
         all_activations_FBL, encoded_token_inputs = collect_activations_batch(
             ae_bundle, encoded_inputs_BL, alive_features_F
@@ -489,12 +492,25 @@ def get_model_name(othello: bool) -> str:
 
 
 def construct_dataset(
-    othello: bool, custom_functions: list[Callable], n_inputs: int, device: str
+    othello: bool,
+    custom_functions: list[Callable],
+    n_inputs: int,
+    device: str,
+    models_path: str = "models/",
+    precompute_dataset: bool = True,
 ) -> dict:
     if not othello:
-        data = construct_eval_dataset(custom_functions, n_inputs, device=device)
+        data = construct_chess_dataset(
+            custom_functions,
+            n_inputs,
+            device=device,
+            models_path=models_path,
+            precompute_dataset=precompute_dataset,
+        )
     else:
-        data = construct_othello_dataset(custom_functions, n_inputs, device=device)
+        data = construct_othello_dataset(
+            custom_functions, n_inputs, device=device, precompute_dataset=precompute_dataset
+        )
 
     return data
 

@@ -5,6 +5,7 @@ from tqdm import tqdm
 from pydantic import BaseModel
 from typing import Optional, Callable
 from nnsight import LanguageModel
+import pickle
 
 from circuits.dictionary_learning import AutoEncoder, ActivationBuffer
 import circuits.chess_utils as chess_utils
@@ -83,12 +84,13 @@ def examine_dimension_chess(
 
     # TODO Refactor activations to be shape (dim_count, top_k, max_length) to reduce memory usage
     # Processing time slows down when using float16, using float32 for now
-    activations = torch.zeros(
+    activations_FBL = torch.zeros(
         (dim_count, n_inputs, ae_bundle.context_length),
         device=processing_device,
         dtype=torch.float32,
     )
-    tokens = torch.zeros(
+    # I'm using B to refer to n_inputs, in this case it's a massive batch size and a bit of a misnomer
+    tokens_BL = torch.zeros(
         (n_inputs, ae_bundle.context_length), device=processing_device, dtype=torch.int64
     )
 
@@ -97,19 +99,24 @@ def examine_dimension_chess(
 
         cur_activations, cur_tokens = collect_activations_batch(ae_bundle, inputs, dims)
 
-        activations[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
-        tokens[i * batch_size : (i + 1) * batch_size, :] = cur_tokens
-    decoded_tokens = [ae_bundle.model.tokenizer.decode(tokens[i]) for i in range(tokens.shape[0])]
+        activations_FBL[:, i * batch_size : (i + 1) * batch_size, :] = cur_activations
+        tokens_BL[i * batch_size : (i + 1) * batch_size, :] = cur_tokens
+
+    encoded_tokens_BL = []
+
+    for input_L in tokens_BL:
+        input_list_L = input_L.tolist()
+        encoded_tokens_BL.append(input_list_L)
 
     per_dim_stats = {}
     idxs_dict = {}
     vocab_size = 32
 
     for i in range(vocab_size):
-        idxs_dict[i] = (tokens == i).nonzero(as_tuple=True)
+        idxs_dict[i] = (tokens_BL == i).nonzero(as_tuple=True)
 
     for i, dim in tqdm(enumerate(dims), total=len(dims), desc="Processing activations"):
-        individual_acts = activations[i]
+        individual_acts_BL = activations_FBL[i]
 
         # top_affected = feature_effect(model, submodule, dictionary, dim_idx, tokens, k=k)
         # top_affected = [(model.tokenizer.decode(tok), prob.item()) for tok, prob in zip(*top_affected)]
@@ -119,27 +126,27 @@ def examine_dimension_chess(
         token_mean_acts = {}
         for tok in idxs_dict:
             idxs = idxs_dict[tok]
-            token_mean_acts[tok] = individual_acts[idxs].mean().item()
+            token_mean_acts[tok] = individual_acts_BL[idxs].mean().item()
         top_tokens = sorted(token_mean_acts.items(), key=lambda x: x[1], reverse=True)[:k]
-        top_tokens = [(ae_bundle.model.tokenizer.decode(tok), act) for tok, act in top_tokens]
+        top_tokens = [(tok, act) for tok, act in top_tokens]
 
-        flattened_acts = rearrange(individual_acts, "b n -> (b n)")
+        flattened_acts = rearrange(individual_acts_BL, "b n -> (b n)")
         topk_indices = torch.argsort(flattened_acts, dim=0, descending=True)[:k]
-        batch_indices = topk_indices // individual_acts.shape[1]
-        token_indices = topk_indices % individual_acts.shape[1]
+        batch_indices = topk_indices // individual_acts_BL.shape[1]
+        token_indices = topk_indices % individual_acts_BL.shape[1]
 
         # .clone() is necessary for saving results with pickle. Otherwise, everything is saved as a reference to the same tensor.
-        individual_acts = [
-            individual_acts[batch_idx, : token_id + 1, None, None].clone()
+        individual_acts_BL = [
+            individual_acts_BL[batch_idx, : token_id + 1, None, None].clone()
             for batch_idx, token_id in zip(batch_indices, token_indices)
         ]
         individual_tokens = [
-            decoded_tokens[batch_idx][: token_idx + 1]
+            encoded_tokens_BL[batch_idx][: token_idx + 1]
             for batch_idx, token_idx in zip(batch_indices, token_indices)
         ]
 
         if dim_count == 1:
-            top_contexts = text_neuron_activations(individual_tokens, activations)
+            top_contexts = text_neuron_activations(individual_tokens, activations_FBL)
         else:
             top_contexts = None
 
@@ -147,8 +154,8 @@ def examine_dimension_chess(
         dim_stats["top_contexts"] = top_contexts
         dim_stats["top_tokens"] = top_tokens
         dim_stats["top_affected"] = top_affected
-        dim_stats["decoded_tokens"] = individual_tokens
-        dim_stats["activations"] = individual_acts
+        dim_stats["encoded_tokens"] = individual_tokens
+        dim_stats["activations"] = individual_acts_BL
 
         per_dim_stats[dim.item()] = dim_stats
 

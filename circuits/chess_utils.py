@@ -404,20 +404,26 @@ def pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess
     return board
 
 
-# TODO This should take a list of custom_board_to_state_fns
 def create_state_stack(
     moves_string: str,
-    custom_board_to_state_fn: Callable[[chess.Board], torch.Tensor],
+    custom_board_to_state_fns: list[Callable[[chess.Board], torch.Tensor]],
+    device: torch.device,
     skill: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
-    """Given a string of PGN format moves, create an 8x8 torch.Tensor for every character in the string."""
+) -> dict[str, torch.Tensor]:
+    """Given a string of PGN format moves, create a torch.Tensor for every character in the string.
+    Return a dict of func_name to state_stack."""
 
     board = chess.Board()
-    initial_states = []
+    initial_states = {}
+    expanded_states = {}
     count = 1
 
-    # Scan 1: Creates states, with length = number of moves in the game
-    initial_states.append(custom_board_to_state_fn(board, skill).to(dtype=DEFAULT_DTYPE))
+    for custom_fn in custom_board_to_state_fns:
+        func_name = custom_fn.__name__
+        initial_states[func_name] = []
+        expanded_states[func_name] = []
+        # Scan 1: Creates states, with length = number of moves in the game
+        initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
     # Apply each move to the board
     for move in moves_string.split():
         try:
@@ -428,9 +434,11 @@ def create_state_stack(
             else:
                 board.push_san(move)
 
-            initial_states.append(custom_board_to_state_fn(board, skill).to(dtype=DEFAULT_DTYPE))
+            for custom_fn in custom_board_to_state_fns:
+                func_name = custom_fn.__name__
+                initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
         except:
-            # because all games are truncated to len 680, often the last move is partial and invalid
+            # because all games are truncated to a length, often the last move is partial and invalid
             # so we don't need to log this, as it will happen on most games
             break
 
@@ -441,39 +449,48 @@ def create_state_stack(
 
     # Second Scan: Expand states to match the length of moves_string
     # For ;1.e4 e5 2.Nf3, ";1.e4" = idx 0, " e5" = idx 1, " 2.Nf3" = idx 2
-    expanded_states = []
     move_index = 0
     for char in moves_string:
         if char == " ":
             move_index += 1
-        expanded_states.append(initial_states[min(move_index, len(initial_states) - 1)])
+        for func_name in initial_states:
+            expanded_states[func_name].append(
+                initial_states[func_name][min(move_index, len(initial_states[func_name]) - 1)]
+            )
 
-    # expanded_states.append(initial_states[-1]) # The last element in expanded_states is the final position of the board.
-    # Currently not using this as len(expanded_states) would be 1 greater than len(moves_string) and that would be confusing.
-    return torch.stack(expanded_states)
+    for func_name in initial_states:
+        expanded_states[func_name] = torch.stack(expanded_states[func_name]).to(device=device)
+    return expanded_states
 
 
 def create_state_stacks(
     moves_strings: list[str],
-    custom_board_to_state_fn: Callable[[chess.Board], torch.Tensor],
+    custom_board_to_state_fns: list[Callable[[chess.Board], torch.Tensor]],
+    device: torch.device,
     skill_array: Optional[torch.Tensor] = None,
-) -> Float[Tensor, "sample_size pgn_str_length rows cols"]:
-    """Given a list of strings of PGN format moves, create a tensor of shape (len(moves_strings), 8, 8).
+) -> dict[str, Float[Tensor, "sample_size pgn_str_length rows cols"]]:
+    """Given a list of strings of PGN format moves, create a dict of func name to tensor.
     custom_board_to_state is a function that takes a chess.Board object and returns a 8x8 torch.Tensor for
     board state, or 1x1 for centipawn advantage."""
-    state_stacks = []
+    state_stacks = {}
     skill = None
+
+    for custom_fn in custom_board_to_state_fns:
+        func_name = custom_fn.__name__
+        state_stacks[func_name] = []
 
     for idx, pgn_string in enumerate(moves_strings):
         if skill_array is not None:
             skill = skill_array[idx]
-        state_stack = create_state_stack(pgn_string, custom_board_to_state_fn, skill)
+        state_stack_dict = create_state_stack(pgn_string, custom_board_to_state_fns, device, skill)
 
-        state_stacks.append(state_stack)
+        for func_name in state_stack_dict:
+            state_stacks[func_name].append(state_stack_dict[func_name])
 
-    # Convert the list of tensors to a single tensor
-    final_state_stack = torch.stack(state_stacks)
-    return final_state_stack
+    for func_name in state_stacks:
+        # Convert the list of tensors to a single tensor
+        state_stacks[func_name] = torch.stack(state_stacks[func_name])
+    return state_stacks
 
 
 def state_stack_to_one_hot(

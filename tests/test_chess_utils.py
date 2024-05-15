@@ -2,6 +2,8 @@ import circuits.chess_utils as chess_utils
 import chess
 import torch
 
+device = "cpu"
+
 
 def test_white_pos_indices():
     test1 = ";1.e4 c5 2.Nf3 d6 3"
@@ -48,7 +50,71 @@ def test_board_to_piece_state():
             [-1, -1, -1, -1, 0, -1, -1, -1],
             [-4, -2, -3, -5, -6, -3, -2, -4],
         ],
-        dtype=torch.int,
+        dtype=torch.int8,
     )
 
     assert torch.equal(state, expected_state)
+
+
+def test_create_state_stacks():
+
+    test_strs = [";1.e4 e5 2.Nf3 ", ";1.e4 e5 2.Nf3 "]
+
+    state_stacks_dict_BLRR = chess_utils.create_state_stacks(
+        test_strs, [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state], device
+    )
+
+    expected_state = torch.tensor(
+        [
+            [4, 2, 3, 5, 6, 3, 0, 4],
+            [1, 1, 1, 1, 0, 1, 1, 1],
+            [0, 0, 0, 0, 0, 2, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 0, -1, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [-1, -1, -1, -1, 0, -1, -1, -1],
+            [-4, -2, -3, -5, -6, -3, -2, -4],
+        ],
+        dtype=torch.int8,
+    )
+
+    assert torch.equal(
+        state_stacks_dict_BLRR[chess_utils.board_to_piece_state.__name__][0][-1], expected_state
+    )
+
+    assert torch.equal(
+        state_stacks_dict_BLRR[chess_utils.board_to_pin_state.__name__][0][-1],
+        torch.tensor([[0]], dtype=torch.int8),
+    )
+
+
+def test_state_stack_to_one_hot():
+    test_strs = [";1.e4 e5 2.Nf3 ", ";1.e4 e5 2.Nf3 "]
+
+    white_knight_index = 8
+    white_rook_index = 10
+
+    custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
+
+    state_stacks_dict_BLRR = chess_utils.create_state_stacks(test_strs, custom_functions, device)
+    one_hot_dict = {}
+
+    for custom_function in custom_functions:
+        func_name = custom_function.__name__
+        config = chess_utils.config_lookup[func_name]
+        one_hot_dict[func_name] = chess_utils.state_stack_to_one_hot(
+            config, device, state_stacks_dict_BLRR[func_name]
+        )
+
+    expected_one_hot_A1_rook = torch.tensor(1)
+    expected_one_hot_A1_knight = torch.tensor(0)
+
+    assert torch.equal(
+        one_hot_dict[chess_utils.board_to_piece_state.__name__][0][-1][0][0][white_rook_index],
+        expected_one_hot_A1_rook,
+    )
+
+    assert torch.equal(
+        one_hot_dict[chess_utils.board_to_piece_state.__name__][0][-1][0][0][white_knight_index],
+        expected_one_hot_A1_knight,
+    )
