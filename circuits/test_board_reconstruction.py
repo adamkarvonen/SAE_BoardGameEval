@@ -13,6 +13,7 @@ from circuits.utils import (
 )
 import circuits.eval_sae_as_classifier as eval_sae
 import circuits.chess_utils as chess_utils
+import circuits.analysis as analysis
 
 
 def get_all_feature_label_file_names(folder_name: str) -> list[str]:
@@ -152,11 +153,18 @@ def compare_constructed_to_true_boards(
     constructed_boards: dict[str, torch.Tensor],
     batch_data: dict[str, torch.Tensor],
     device: torch.device,
+    mask: bool = False,
 ) -> dict:
 
     for custom_function in custom_functions:
         true_boards_BLRRC = batch_data[custom_function.__name__]
         constructed_boards_TBLRRC = constructed_boards[custom_function.__name__]
+
+        if mask:
+            # This works. mask_initial_board_state expects TFRRC, but BLRRC works as well.
+            true_boards_BLRRC = analysis.mask_initial_board_state(
+                true_boards_BLRRC, custom_function, device
+            )
 
         # Make it binary. Any square with multiple counts is now 1.
         constructed_boards_TBLRRC = (constructed_boards_TBLRRC > 0).int()
@@ -175,9 +183,14 @@ def compare_constructed_to_true_boards(
         num_board_states = true_boards_BLRRC.shape[1]
         num_rows = true_boards_BLRRC.shape[2]
         num_boards = batch_size * num_board_states
+        num_squares = num_boards * num_rows * num_rows
+
+        if mask:
+            # minor optimization by only doing this if mask is True
+            num_squares = int(true_boards_BLRRC.sum().item())
 
         results[custom_function.__name__]["num_boards"] += num_boards
-        results[custom_function.__name__]["num_squares"] += num_boards * num_rows * num_rows
+        results[custom_function.__name__]["num_squares"] += num_squares
         results[custom_function.__name__]["num_true_positive_squares"] += true_positive_T
         results[custom_function.__name__]["num_false_positive_squares"] += false_positive_T
 
@@ -185,6 +198,8 @@ def compare_constructed_to_true_boards(
 
 
 def normalize_results(results: dict, n_inputs: int, custom_functions: list[Callable]) -> dict:
+    if n_inputs == 0:
+        raise ValueError("n_inputs must be greater than 0")
     results["active_per_token"] /= n_inputs
     for custom_function in custom_functions:
         results[custom_function.__name__]["classifiers_per_token"] /= n_inputs
@@ -193,21 +208,34 @@ def normalize_results(results: dict, n_inputs: int, custom_functions: list[Calla
     return results
 
 
-def calculate_F1_scores(results: dict, custom_functions: list[Callable]) -> dict:
+def calculate_F1_scores(
+    results: dict, custom_functions: list[Callable], device: torch.device
+) -> dict:
+
+    epsilon = 1e-8
+
     for custom_function in custom_functions:
         num_squares = results[custom_function.__name__]["num_squares"]
-        num_true_positive_squares = results[custom_function.__name__]["num_true_positive_squares"]
-        num_false_positive_squares = results[custom_function.__name__]["num_false_positive_squares"]
+        num_true_positive_squares_T = results[custom_function.__name__]["num_true_positive_squares"]
+        num_false_positive_squares_T = results[custom_function.__name__][
+            "num_false_positive_squares"
+        ]
+        num_positives_T = num_true_positive_squares_T + num_false_positive_squares_T
 
-        false_negatives = num_squares - num_true_positive_squares - num_false_positive_squares
+        T = num_positives_T.shape[0]
+        num_squares_T = torch.full((T,), num_squares, device=device)
 
-        precision = num_true_positive_squares / (
-            num_true_positive_squares + num_false_positive_squares
+        false_negatives_T = (
+            num_squares_T - num_true_positive_squares_T - num_false_positive_squares_T
         )
-        recall = num_true_positive_squares / (num_true_positive_squares + false_negatives)
+
+        precision = num_true_positive_squares_T / (num_positives_T + epsilon)
+        recall = num_true_positive_squares_T / (
+            num_true_positive_squares_T + false_negatives_T + epsilon
+        )
 
         # Calculate F1 score
-        f1_scores = 2 * (precision * recall) / (precision + recall)
+        f1_scores = 2 * (precision * recall) / (precision + recall + epsilon)
         results[custom_function.__name__]["precision"] = precision
         results[custom_function.__name__]["recall"] = recall
         results[custom_function.__name__]["f1_score"] = f1_scores
@@ -266,6 +294,7 @@ def test_board_reconstructions(
     print_results: bool = False,
     save_results: bool = True,
     precomputed: bool = True,
+    mask: bool = False,
 ) -> dict:
 
     torch.set_grad_enabled(False)
@@ -350,12 +379,12 @@ def test_board_reconstructions(
             for custom_function in constructed_boards:
                 constructed_boards[custom_function] += additive_boards[custom_function]
         results = compare_constructed_to_true_boards(
-            results, custom_functions, constructed_boards, batch_data, device
+            results, custom_functions, constructed_boards, batch_data, device, mask
         )
 
     results["n_inputs"] = n_inputs
     results = normalize_results(results, n_inputs, custom_functions)
-    results = calculate_F1_scores(results, custom_functions)
+    results = calculate_F1_scores(results, custom_functions, device)
 
     if print_results:
         print_out_results(results, custom_functions)
