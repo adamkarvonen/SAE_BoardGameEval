@@ -118,3 +118,14 @@ def test_state_stack_to_one_hot():
         one_hot_dict[chess_utils.board_to_piece_state.__name__][0][-1][0][0][white_knight_index],
         expected_one_hot_A1_knight,
     )
+
+
+def test_board_to_pin_state():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_pin_state(initial_board), expected_answer)
+
+    test_str = "1. e4 e5 2. d3 f6 3. Nd2 Bb4"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_pin_state(board), expected_answer)
