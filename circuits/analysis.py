@@ -381,6 +381,7 @@ def analyze_results_dict(
     verbose: bool = False,
     print_results: bool = True,
     save_results: bool = True,
+    mask: bool = False,
 ) -> dict:
     custom_functions = []
 
@@ -431,7 +432,7 @@ def analyze_results_dict(
                 high_threshold,
                 low_threshold,
                 significance_threshold,
-                # mask=True,
+                mask=mask,
                 print_results=print_results,
                 verbose=verbose,
             )
