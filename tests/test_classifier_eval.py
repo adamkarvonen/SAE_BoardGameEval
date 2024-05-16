@@ -2,6 +2,7 @@ import torch
 
 import circuits.eval_sae_as_classifier as eval_sae_as_classifier
 import circuits.chess_utils as chess_utils
+import circuits.analysis as analysis
 import chess
 
 DEVICE = torch.device("cuda")
@@ -35,21 +36,22 @@ def test_aggregate_batch_statistics():
 
     batch_size = 3
 
-    inputs_BL = [
-        ";1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6 5.O-O Be7 6.Re1 b5 7.Bb3 d6 8.c3 O-O"
-    ] * batch_size
+    inputs_BL = [";1.e4 e5 2.d3 f6 3.Nd2 Bb4 4.a3"] * batch_size
+    # there is a pin after Bb4 (5 characters total)
 
     game_len = len(inputs_BL[0])
-    data = {}
-    data["board_to_pin_state"] = torch.zeros(batch_size, game_len, 1, 1, 1).to(DEVICE)
-    data["board_to_pin_state"][:, 0:5, :, :, 0] = 1  # All games have a pin before the first move
 
+    data = {}
     batch_data = eval_sae_as_classifier.get_data_batch(
-        data, inputs_BL, 0, batch_size, custom_functions, DEVICE
+        data, inputs_BL, 0, batch_size, custom_functions, DEVICE, precomputed=False
     )
 
     all_activations_FBL = torch.zeros(num_features, batch_size, game_len).to(DEVICE)
-    all_activations_FBL[0, :, 0:5] = 0.6  # Feature 0 activates on pins and initial state
+
+    dim_0_on = 5
+    all_activations_FBL[0, :, (game_len - dim_0_on) : game_len] = (
+        0.6  # Feature 0 activates on pins and final state
+    )
     all_activations_FBL[1, :, 5:8] = 0.6  # Feature 1 activates on the first move
 
     start = 0
@@ -66,7 +68,7 @@ def test_aggregate_batch_statistics():
         DEVICE,
     )
 
-    dim_0_on_count = 5.0 * batch_size  # 5.0 == num_chars
+    dim_0_on_count = dim_0_on * batch_size  # 5.0 == num_chars
     dim_1_on_count = 3.0 * batch_size
     expected_on_count = torch.tensor([dim_0_on_count, dim_1_on_count, 0.0, 0.0]).to(DEVICE)
 
@@ -81,10 +83,6 @@ def test_aggregate_batch_statistics():
 
     config = chess_utils.piece_config
     board = chess.Board()
-    initial_state = config.custom_board_state_function(board)
-    initial_state = initial_state.view(1, 1, config.num_rows, config.num_cols)
-    initial_one_hot = chess_utils.state_stack_to_one_hot(config, DEVICE, initial_state).squeeze()
-
     board.push_san("e4")
     first_move_state = config.custom_board_state_function(board)
     first_move_state = first_move_state.view(1, 1, config.num_rows, config.num_cols)
@@ -93,28 +91,27 @@ def test_aggregate_batch_statistics():
     ).squeeze()
 
     assert torch.equal(
-        results["board_to_piece_state"]["on"][0, 0, :, :, :], initial_one_hot * dim_0_on_count
-    )
-    assert torch.equal(
         results["board_to_piece_state"]["on"][0, 1, :, :, :], first_move_one_hot * dim_1_on_count
     )
+
+    results = eval_sae_as_classifier.update_all_tracker(
+        results, custom_functions, batch_data, DEVICE
+    )
+    results = analysis.add_off_tracker(results, custom_functions, DEVICE)
 
     results = eval_sae_as_classifier.normalize_tracker(results, "on", custom_functions, DEVICE)
     results = eval_sae_as_classifier.normalize_tracker(results, "off", custom_functions, DEVICE)
 
     assert torch.equal(
-        results["board_to_piece_state"]["on_normalized"][0, 0, :, :, :], initial_one_hot
-    )
-    assert torch.equal(
         results["board_to_piece_state"]["on_normalized"][0, 1, :, :, :], first_move_one_hot
     )
 
     assert torch.equal(
-        results["board_to_pin_state"]["on_normalized"][0, 0, :, :, :].squeeze(),
+        results["board_to_pin_state"]["on_normalized"][0, -4, :, :, :].squeeze(),
         torch.tensor(1.0).to(DEVICE),
     )
     assert torch.equal(
-        results["board_to_pin_state"]["off_normalized"][0, 0, :, :, :].squeeze(),
+        results["board_to_pin_state"]["off_normalized"][0, -4, :, :, :].squeeze(),
         torch.tensor(0.0).to(DEVICE),
     )
     assert results["board_to_pin_state"]["off_normalized"][0, 2, :, :, :].squeeze().item() < 0.5
