@@ -44,8 +44,8 @@ from IPython import embed
 
 
 # Global resources
-N_GPUS = 4
-N_JOBS = 4
+N_GPUS = 8
+N_JOBS = 8
 RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)] * (N_JOBS // N_GPUS))
 
 
