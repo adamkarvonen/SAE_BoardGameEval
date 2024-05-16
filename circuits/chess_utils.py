@@ -333,6 +333,7 @@ class Config:
     custom_board_state_function: Callable
     num_rows: int = 8
     num_cols: int = 8
+    linear_probe_name: str
 
 
 piece_config = Config(
