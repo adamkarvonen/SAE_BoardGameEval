@@ -282,16 +282,21 @@ def board_to_can_claim_draw(board: chess.Board, skill: Optional[int] = None) -> 
     state[0][0] = 1 if board.can_claim_draw() else 0
     return state
 
-def board_to_can_check_next(board: chess.Board) -> bool:
+
+def board_to_can_check_next(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
-    The 1x1 array indicates whether the current player can check in the next move (1 = yes, 0 = no)."""
+    The 1x1 array indicates whether the current player can check in the next move (1 = yes, 0 = no).
+    """
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     for move in board.legal_moves:
         board.push(move)
         if board.is_check():
             board.pop()
-            return True
+            state[0][0] = 1
+            return state
         board.pop()
-    return False
+    return state
+
 
 def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return an 8x8 torch.Tensor.
