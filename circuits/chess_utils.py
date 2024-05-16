@@ -331,9 +331,9 @@ class Config:
     min_val: int
     max_val: int
     custom_board_state_function: Callable
+    linear_probe_name: str = ""
     num_rows: int = 8
     num_cols: int = 8
-    linear_probe_name: str
 
 
 piece_config = Config(
