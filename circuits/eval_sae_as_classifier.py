@@ -309,7 +309,6 @@ def apply_indexing_function(
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
-
     custom_indices_BI = torch.tensor(custom_indices).to(device)
     custom_indices_FBI = einops.repeat(
         custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
@@ -336,7 +335,7 @@ def compute_custom_indices(
     num_active_features: int,
     device: str,
 ) -> torch.Tensor:
-    """ TODO(rangell): """
+    """TODO(rangell):"""
     max_indices = 20
 
     custom_indices = []
@@ -354,7 +353,7 @@ def filter_data_by_custom_indices(
     custom_indices_BI: torch.Tensor,
     device: torch.device,
 ) -> tuple[torch.Tensor, dict]:
-    """ TODO(rangell): """
+    """TODO(rangell):"""
 
     custom_indices_FBI = einops.repeat(
         custom_indices_BI, "B I -> F B I", F=activations_FBL.shape[0]
@@ -383,7 +382,7 @@ def prep_firing_rate_data(
     device: torch.device,
     n_inputs: int,
     othello: bool = False,
-) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor, torch.Tensor]:
+) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
     """Moves data from the data dictionary into the NNsight activation buffer."""
     for key in data:
         if key == "decoded_inputs" or key == "encoded_inputs":
@@ -402,10 +401,7 @@ def prep_firing_rate_data(
         autoencoder_path, device, firing_rate_data, batch_size, model_path, model_name, n_ctxs
     )
 
-    encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
-    model_activations = get_model_activations(ae_bundle, encoded_inputs_AL)
-
-    return data, ae_bundle, pgn_strings, model_activations, encoded_inputs
+    return data, ae_bundle, pgn_strings, encoded_inputs
 
 
 def get_output_location(
@@ -430,37 +426,35 @@ def aggregate_statistics(
     precomputed: bool = True,
 ) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
-    As an example of desired behavior, view tests/test_classifier_eval.py."""
+    As an example of desired behavior, view tests/test_classifier_eval.py.
+    precomputed will precompute the entire dataset and model activations and store them in memory.
+    Faster, but uses far more VRAM."""
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
     indexing_function_name = get_indexing_function_name(indexing_function)
 
-    data, ae_bundle, pgn_strings, model_activations_ALD, encoded_inputs = prep_firing_rate_data(
+    data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
+    if precomputed:
+        encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
+        model_activations_ALD = get_model_activations(ae_bundle, encoded_inputs_AL)
+
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
-    # TODO: Custom thresholds per feature based on max activations
+
+    torch.manual_seed(0)  # For reproducibility
     alive_features_F, max_activations_F = get_firing_features(
         ae_bundle, firing_rate_n_inputs, batch_size, device
     )
+    ae_bundle.buffer = None
 
     if indexing_function is not None:
         custom_indices_AI = compute_custom_indices(
             pgn_strings, indexing_function, alive_features_F.shape[0], device
         )
 
-    eval_results = evaluate(
-        ae_bundle.ae,
-        ae_bundle.buffer,
-        max_len=ae_bundle.context_length,
-        batch_size=batch_size,
-        io="out",
-        device=device,
-    )
-
-    ae_bundle.buffer = None
     num_features = len(alive_features_F)
     print(
         f"Out of {ae_bundle.dictionary_size} features, on {firing_rate_n_inputs} activations, {num_features} are alive."
@@ -479,7 +473,7 @@ def aggregate_statistics(
     thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
     results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_F, device)
-    
+
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
@@ -488,7 +482,12 @@ def aggregate_statistics(
             data, pgn_strings_BL, start, end, custom_functions, device, precomputed=precomputed
         )
 
-        model_activations_BLD = model_activations_ALD[start:end]
+        if precomputed:
+            model_activations_BLD = model_activations_ALD[start:end]
+        else:
+            encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
+            model_activations_BLD = get_model_activations(ae_bundle, encoded_inputs_BL)
+
         all_activations_FBL = get_feature_activations_batch(
             ae_bundle, model_activations_BLD, alive_features_F
         )
@@ -531,7 +530,6 @@ def aggregate_statistics(
         "indexing_function": indexing_function_name,
     }
     results["hyperparameters"] = hyperparameters
-    results["eval_results"] = eval_results
 
     output_location = get_output_location(autoencoder_path, n_inputs, indexing_function)
 
@@ -572,6 +570,9 @@ def construct_dataset(
     models_path: str = "models/",
     precompute_dataset: bool = True,
 ) -> dict:
+    """Constructs the dataset for either Othello or Chess.
+    precompute_dataset will precompute the entire dataset and model activations and store them in memory.
+    Faster, but uses far more VRAM."""
     if not othello:
         data = construct_chess_dataset(
             custom_functions,
