@@ -404,6 +404,28 @@ def pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess
     return board
 
 
+def typical_pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess.Board:
+    """Convert a PGN string to a chess.Board object.
+    We are making an assumption that the PGN string is in this format:
+    1. e4 e5 2. or 1. e4 e5 2. Nf3
+    Note: No semicolon, space after the move number. This matches a normal PGN string, not the one used in
+    the dataset (pgn_string_to_board)"""
+    board = chess.Board()
+    for move in pgn_string.split():
+        if "." in move:
+            continue
+        if move == "":
+            continue
+        try:
+            board.push_san(move)
+        except:
+            if allow_exception:
+                break
+            else:
+                raise ValueError(f"Invalid move: {move}")
+    return board
+
+
 def create_state_stack(
     moves_string: str,
     custom_board_to_state_fns: list[Callable[[chess.Board], torch.Tensor]],
