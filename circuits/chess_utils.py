@@ -215,6 +215,84 @@ def board_to_legal_moves_state(board: chess.Board, skill: Optional[int] = None) 
     return state
 
 
+def board_to_has_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates if the current player has castling rights (1 = yes, 0 = no)."""
+
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    state[0, 0] = 1 if board.has_castling_rights(current_turn) else 0
+    return state
+
+def board_to_has_kingside_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates if the current player has kingside castling rights (1 = yes, 0 = no)."""
+
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    state[0, 0] = 1 if board.has_kingside_castling_rights(current_turn) else 0
+    return state
+
+def board_to_has_queenside_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates if the current player has queenside castling rights (1 = yes, 0 = no)."""
+
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    state[0, 0] = 1 if board.has_queenside_castling_rights(current_turn) else 0
+    return state
+
+def board_to_has_legal_en_passant(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates if there is a legal en passent on the board (1 = yes, 0 = no)."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    state[0, 0] = 1 if board.has_legal_en_passant() else 0
+    return state
+
+def board_to_is_stalemate(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+     The 1x1 array indicates whether the game is a stalemate (1 = yes, 0 = no)."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    state[0][0] = 1 if board.is_stalemate() else 0
+    return state
+
+def board_to_pseudo_legal_moves_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Return an 8x8 torch.Tensor indicating squares where the current player has pseudo-legal moves.
+    Pseudo-legal moves might leave or put a king in check, but are otherwise valid.
+
+    Each square in the array is 1 if White could pseudo-legally move a piece to that square, otherwise 0.
+    In the 8x8 array, row 0 corresponds to A1-H1 (from White's perspective), row 1 to A2-H2, etc.
+    """
+    MOVING_COLOR = board.turn
+    
+    # Initialize the state array with all zeros
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
+
+    # Iterate through all legal moves for White
+    for move in board.pseudo_legal_moves:
+        if board.color_at(move.from_square) == MOVING_COLOR:
+            to_square = move.to_square
+            state[to_square // 8, to_square % 8] = 1
+    return state
+
+def board_to_can_claim_draw(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+     The 1x1 array indicates whether the player to move can claim a draw (1 = yes, 0 = no)."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    state[0][0] = 1 if board.can_claim_draw() else 0
+    return state
+
+def board_to_can_check_next(board: chess.Board) -> bool:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether the current player can check in the next move (1 = yes, 0 = no)."""
+    for move in board.legal_moves:
+        board.push(move)
+        if board.is_check():
+            board.pop()
+            return True
+        board.pop()
+    return False
+
 def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return an 8x8 torch.Tensor.
     All squares will be 0 except for the square where the last white move was made.
@@ -345,6 +423,76 @@ othello_no_last_move_config = Config(
     num_cols=8,
 )
 
+has_castling_rights_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_castling_rights,
+    linear_probe_name="has_castling_rights",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_kingside_castling_rights_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_kingside_castling_rights,
+    linear_probe_name="has_kingside_castling_rights",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_queenside_castling_rights_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_queenside_castling_rights,
+    linear_probe_name="has_queenside_castling_rights",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_legal_en_passant_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_legal_en_passant,
+    linear_probe_name="has_legal_en_passant",
+    num_rows=1,
+    num_cols=1,
+)
+
+is_stalemate_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_is_stalemate,
+    linear_probe_name="is_stalemate",
+    num_rows=1,
+    num_cols=1,
+)
+
+pseudo_legal_move_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_pseudo_legal_moves_state,
+    linear_probe_name="chess_pseudo_legal_move_probe",
+)
+
+can_claim_draw_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_can_claim_draw,
+    linear_probe_name="can_claim_draw",
+    num_rows=1,
+    num_cols=1,
+)
+
+can_check_next_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_can_check_next,
+    linear_probe_name="can_check_next",
+    num_rows=1,
+    num_cols=1,
+)
+
 all_configs = [
     piece_config,
     color_config,
@@ -358,6 +506,14 @@ all_configs = [
     othello_config,
     othello_mine_yours_config,
     othello_no_last_move_config,
+    has_castling_rights_config,
+    has_kingside_castling_rights_config,
+    has_queenside_castling_rights_config,
+    has_legal_en_passant_config,
+    is_stalemate_config,
+    pseudo_legal_move_config,
+    can_claim_draw_config,
+    can_check_next_config
 ]
 
 config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}
@@ -392,6 +548,28 @@ def pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess
     for move in pgn_string.split():
         if "." in move:
             move = move.split(".")[1]
+        if move == "":
+            continue
+        try:
+            board.push_san(move)
+        except:
+            if allow_exception:
+                break
+            else:
+                raise ValueError(f"Invalid move: {move}")
+    return board
+
+
+def typical_pgn_string_to_board(pgn_string: str, allow_exception: bool = False) -> chess.Board:
+    """Convert a PGN string to a chess.Board object.
+    We are making an assumption that the PGN string is in this format:
+    1. e4 e5 2. or 1. e4 e5 2. Nf3
+    Note: No semicolon, space after the move number. This matches a normal PGN string, not the one used in
+    the dataset (pgn_string_to_board)"""
+    board = chess.Board()
+    for move in pgn_string.split():
+        if "." in move:
+            continue
         if move == "":
             continue
         try:
