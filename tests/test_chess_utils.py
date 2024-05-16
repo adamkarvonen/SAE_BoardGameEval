@@ -129,3 +129,83 @@ def test_board_to_pin_state():
     board = chess_utils.typical_pgn_string_to_board(test_str)
     expected_answer = torch.tensor([[1]], dtype=torch.int8)
     assert torch.equal(chess_utils.board_to_pin_state(board), expected_answer)
+
+
+def test_board_to_has_castling_rights():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_castling_rights(initial_board), expected_answer)
+
+    test_str = "1. e4 d5 2. Nc3 dxe4 3. Nxe4 Nf6 4. d3 e6 5. Be3 h6 6. Qf3 Be7 7. O-O-O Nh5"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_castling_rights(board), expected_answer)
+
+
+def test_board_to_has_queenside_castling_rights():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_queenside_castling_rights(initial_board), expected_answer)
+
+    test_str = "1. e4 d5 2. Nc3 dxe4 3. Nxe4 Nf6 4. d3 e6 5. Be3 h6 6. Qf3 Be7 7. O-O-O Nh5"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_queenside_castling_rights(board), expected_answer)
+
+
+def test_board_to_has_kingside_castling_rights():
+    initial_board = chess.Board()
+    test_str = "1. e4 d5 2. Nc3 dxe4 3. Nxe4 Nf6 4. d3 e6 5. Be3 h6 6. Qf3 Be7 7. O-O-O"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_kingside_castling_rights(board), expected_answer)
+    
+    test_str = "1. e4 d5 2. Nc3 dxe4 3. Nxe4 Nf6 4. d3 e6 5. Be3 h6 6. Qf3 Be7 7. O-O-O Nh5"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_kingside_castling_rights(board), expected_answer)
+
+
+def test_board_to_has_legal_en_passant():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_legal_en_passant(initial_board), expected_answer)
+
+    test_str = "1. e4 Nc6 2. e5 f5"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_legal_en_passant(board), expected_answer)
+    
+
+def test_board_to_can_claim_draw():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_can_claim_draw(initial_board), expected_answer)
+
+    test_str = "1. Nf3 Nc6 2. Ng1 Nb8 3. Nf3 Nc6 4. Ng1 Nb8 5. Nf3 Nc6 6. Ng1 Nb8"
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_can_claim_draw(board), expected_answer)
+    
+
+def test_board_to_is_stalemate():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_is_stalemate(initial_board), expected_answer)
+
+    test_str = "1. e3 a5 2. Qh5 Ra6 3. Qxa5 h5 5. h4 Rah6 5. Qxc7 f6 6. Qxd7+ Kf7 7. Qxb7 Qd3 8. Qxb8 Qh7 9. Qxc8 Kg6 10. Qe6" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_is_stalemate(board), expected_answer)
+
+
+def test_board_to_can_check_next():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_can_check_next(initial_board), expected_answer)
+
+    test_str = "1. e4 f5" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_can_check_next(board), expected_answer)
