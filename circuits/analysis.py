@@ -150,20 +150,31 @@ def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tens
 
 
 def mask_initial_board_state(
-    on_tracker_TFRRC: torch.Tensor, device: torch.device, mine_state: bool = False
+    on_tracker_TFRRC: torch.Tensor,
+    custom_function: Callable,
+    device: torch.device,
+    mine_state: bool = False,
 ) -> torch.Tensor:
+
+    T, F, R1, R2, C = on_tracker_TFRRC.shape
+    config = chess_utils.config_lookup[custom_function.__name__]
+
     initial_board = chess.Board()
-    initial_state_RRC = chess_utils.board_to_piece_state(initial_board)
-    initial_state_11RRC = einops.rearrange(initial_state_RRC, "R1 R2 -> 1 1 R1 R2")
-    initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(
-        chess_utils.piece_config, device, initial_state_11RRC
-    ).squeeze()
+    initial_state_RR = custom_function(initial_board)
+    initial_state_11RR = einops.rearrange(initial_state_RR, "R1 R2 -> 1 1 R1 R2")
+    initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(config, device, initial_state_11RR)
+    initial_one_hot_RRC = einops.rearrange(initial_one_hot_11RRC, "1 1 R1 R2 C -> R1 R2 C")
 
     if mine_state:
-        initial_one_hot_11RRC = transform_board_from_piece_color_to_piece(initial_one_hot_11RRC)
+        initial_one_hot_RRC = transform_board_from_piece_color_to_piece(initial_one_hot_RRC)
 
-    mask_11RRC = initial_one_hot_11RRC == 1
-    on_tracker_TFRRC[:, :, mask_11RRC] = 0
+    mask_RRC = initial_one_hot_RRC == 1
+    mask_TFRRC = einops.repeat(mask_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
+    on_tracker_TFRRC[mask_TFRRC] = 0
+
+    if custom_function == chess_utils.board_to_piece_state:
+        # Optionally, we also mask off the blank class
+        on_tracker_TFRRC[:, :, :, :, 6] = 0
 
     return on_tracker_TFRRC
 
@@ -234,7 +245,7 @@ def get_timestep_counts(
 
 def analyze_board_tracker(
     results: dict,
-    function: str,
+    function: Callable,
     on_key: str,
     off_key: str,
     device: torch.device,
@@ -248,19 +259,20 @@ def analyze_board_tracker(
 ) -> torch.Tensor:
 
     othello = False
+    function_name = function.__name__
 
-    if function in othello_utils.othello_functions:
+    if function_name in othello_utils.othello_functions:
         othello = True
 
     normalized_on_key = on_key + "_normalized"
     normalized_off_key = off_key + "_normalized"
 
-    num_thresholds = results[function][normalized_on_key].shape[0]
+    num_thresholds = results[function_name][normalized_on_key].shape[0]
 
-    piece_state_on_normalized = results[function][normalized_on_key].clone()
-    piece_state_off_normalized = results[function][normalized_off_key].clone()
-    piece_state_on_TFRRC = results[function][on_key].clone()
-    piece_state_off_TFRRC = results[function][off_key].clone()
+    piece_state_on_normalized = results[function_name][normalized_on_key].clone()
+    piece_state_off_normalized = results[function_name][normalized_off_key].clone()
+    piece_state_on_TFRRC = results[function_name][on_key].clone()
+    piece_state_off_TFRRC = results[function_name][off_key].clone()
     original_shape = piece_state_on_TFRRC.shape
 
     piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
@@ -271,13 +283,12 @@ def analyze_board_tracker(
         piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
 
     if mask and not othello:
-        piece_state_on_TFRRC = mask_initial_board_state(piece_state_on_TFRRC, device, mine_state)
-        piece_state_off_counting_TFRRC = mask_initial_board_state(
-            piece_state_off_counting_TFRRC, device, mine_state
+        piece_state_on_TFRRC = mask_initial_board_state(
+            piece_state_on_TFRRC, function, device, mine_state
         )
-        # Optionally, we also mask off the blank class
-        piece_state_on_TFRRC[:, :, :, :, 6] = 0
-        piece_state_off_counting_TFRRC[:, :, :, :, 6] = 0
+        piece_state_off_counting_TFRRC = mask_initial_board_state(
+            piece_state_off_counting_TFRRC, function, device, mine_state
+        )
 
     (
         above_counts_T,
@@ -332,7 +343,7 @@ def analyze_board_tracker(
 
     if print_results:
         print(
-            f"{function} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
+            f"{function_name} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
         )
         print(above_counts_T)
         print(summary_board_RR)
@@ -340,7 +351,7 @@ def analyze_board_tracker(
         print(coverage_RR)
         print()
         print(
-            f"{function} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
+            f"{function_name} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
         )
         print(classifier_counts_T)
         print(classifier_summary_board_RR)
@@ -425,7 +436,7 @@ def analyze_results_dict(
         if config.num_rows == 8:
             above_counts_binary_TFRRC = analyze_board_tracker(
                 results,
-                func_name,
+                custom_function,
                 "on",
                 "off",
                 device,
@@ -437,7 +448,7 @@ def analyze_results_dict(
                 verbose=verbose,
             )
             feature_labels[func_name] = above_counts_binary_TFRRC
-            analyze_feature_labels(above_counts_binary_TFRRC)
+            analyze_feature_labels(above_counts_binary_TFRRC, print_results=print_results)
 
         else:
             (
