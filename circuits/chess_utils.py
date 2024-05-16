@@ -331,6 +331,28 @@ def board_to_last_self_move_state(board: chess.Board, skill: Optional[int] = Non
     return state
 
 
+def board_to_material(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates the material count of the player to move."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    pieces = board.occupied_co[current_turn]
+    material = chess.popcount(pieces & board.pawns) + 3 * chess.popcount(pieces & board.knights) + 3 * chess.popcount(pieces & board.bishops) + 5 * chess.popcount(pieces & board.rooks) + 9 * chess.popcount(pieces & board.queens)
+    state[0][0] = material
+    return state
+
+
+def board_to_number_of_pieces(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates the number of pieces of the player to move."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    pieces = board.occupied_co[current_turn]
+    num_pieces = chess.popcount(pieces & board.pawns) + chess.popcount(pieces & board.knights) + chess.popcount(pieces & board.bishops) + chess.popcount(pieces & board.rooks) + chess.popcount(pieces & board.queens)
+    state[0][0] = num_pieces
+    return state
+
+
 @dataclass
 class Config:
     min_val: int
@@ -499,6 +521,26 @@ can_check_next_config = Config(
     num_cols=1,
 )
 
+material_config = Config(
+    min_val=0,
+    max_val=39,
+    custom_board_state_function=board_to_material,
+    linear_probe_name="material",
+    num_rows=1,
+    num_cols=1,
+)
+
+
+num_pieces_config = Config(
+    min_val=0,
+    max_val=15,
+    custom_board_state_function=board_to_number_of_pieces,
+    linear_probe_name="num_pieces",
+    num_rows=1,
+    num_cols=1,
+)
+
+
 all_configs = [
     piece_config,
     color_config,
@@ -519,7 +561,9 @@ all_configs = [
     is_stalemate_config,
     pseudo_legal_move_config,
     can_claim_draw_config,
-    can_check_next_config
+    can_check_next_config,
+    material_config,
+    num_pieces_config
 ]
 
 config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}

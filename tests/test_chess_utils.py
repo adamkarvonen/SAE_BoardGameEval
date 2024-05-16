@@ -209,3 +209,28 @@ def test_board_to_can_check_next():
     board = chess_utils.typical_pgn_string_to_board(test_str)
     expected_answer = torch.tensor([[1]], dtype=torch.int8)
     assert torch.equal(chess_utils.board_to_can_check_next(board), expected_answer)
+
+
+def test_board_to_material():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[39]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_material(initial_board), expected_answer)
+
+    test_str = "1. e4 d5 2. exd5" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[38]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_material(board), expected_answer)
+
+
+def test_board_to_number_of_pieces():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[15]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_number_of_pieces(initial_board), expected_answer)
+
+    test_str = "1. e4 d5 2. exd5" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[14]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_number_of_pieces(board), expected_answer)
+    
+    
+test_board_to_number_of_pieces()
