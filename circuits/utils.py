@@ -12,7 +12,7 @@ from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 from transformer_lens import HookedTransformer
 
-from circuits.nnsight_buffer import NNsightActivationBuffer
+from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
 from circuits.chess_utils import encode_string
 from circuits.dictionary_learning import ActivationBuffer
