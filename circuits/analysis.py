@@ -164,21 +164,21 @@ def mask_initial_board_state(
     mine_state: bool = False,
 ) -> torch.Tensor:
 
-    T, F, R1, R2, C = on_tracker_TFRRC.shape
-    config = chess_utils.config_lookup[custom_function.__name__]
+    # T, F, R1, R2, C = on_tracker_TFRRC.shape
+    # config = chess_utils.config_lookup[custom_function.__name__]
 
-    initial_board = chess.Board()
-    initial_state_RR = custom_function(initial_board)
-    initial_state_11RR = einops.rearrange(initial_state_RR, "R1 R2 -> 1 1 R1 R2")
-    initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(config, device, initial_state_11RR)
-    initial_one_hot_RRC = einops.rearrange(initial_one_hot_11RRC, "1 1 R1 R2 C -> R1 R2 C")
+    # initial_board = chess.Board()
+    # initial_state_RR = custom_function(initial_board)
+    # initial_state_11RR = einops.rearrange(initial_state_RR, "R1 R2 -> 1 1 R1 R2")
+    # initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(config, device, initial_state_11RR)
+    # initial_one_hot_RRC = einops.rearrange(initial_one_hot_11RRC, "1 1 R1 R2 C -> R1 R2 C")
 
-    if mine_state:
-        initial_one_hot_RRC = transform_board_from_piece_color_to_piece(initial_one_hot_RRC)
+    # if mine_state:
+    #     initial_one_hot_RRC = transform_board_from_piece_color_to_piece(initial_one_hot_RRC)
 
-    mask_RRC = initial_one_hot_RRC == 1
-    mask_TFRRC = einops.repeat(mask_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
-    on_tracker_TFRRC[mask_TFRRC] = 0
+    # mask_RRC = initial_one_hot_RRC == 1
+    # mask_TFRRC = einops.repeat(mask_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
+    # on_tracker_TFRRC[mask_TFRRC] = 0
 
     if custom_function == chess_utils.board_to_piece_state:
         # Optionally, we also mask off the blank class
