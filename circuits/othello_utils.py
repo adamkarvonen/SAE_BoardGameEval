@@ -28,22 +28,6 @@ def board_state_to_RRC(board_state, flip: int = 1):
     return one_hot
 
 
-def board_state_ignore_last_move_to_RRC(board_state, last_move: int, flip: int = 1):
-    board_state = t.tensor(board_state, dtype=t.int8)
-
-    r = last_move // 8
-    c = last_move % 8
-
-    board_state[r, c] = 0
-    board_state *= flip
-
-    one_hot = t.zeros((8, 8, 3), dtype=t.int8)
-    one_hot[..., 0] = (board_state == (-1 * flip)).int()
-    one_hot[..., 1] = (board_state == 0).int()
-    one_hot[..., 2] = (board_state == (1 * flip)).int()
-    return one_hot
-
-
 # TODO Remove duplicated logic from these functions
 def games_batch_to_state_stack_BLRRC(batch_str_moves):
     """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
@@ -63,8 +47,8 @@ def games_batch_to_state_stack_BLRRC(batch_str_moves):
     return t.stack(game_stack, axis=0)
 
 
-def games_batch_no_last_move_to_state_stack_BLRRC(batch_str_moves):
-    """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
+def games_batch_to_valid_moves_BLRRC(batch_str_moves):
+    """Sequences of moves (dataset format) to state stack of valid moves"""
     game_stack = []
     for game in batch_str_moves:
         if isinstance(game, t.Tensor):
@@ -73,12 +57,12 @@ def games_batch_no_last_move_to_state_stack_BLRRC(batch_str_moves):
         board = OthelloBoardState()
         states = []
         for i, move in enumerate(game):
-            flip = 1
-            if i % 2 == 1:
-                flip = -1
+            moves_board = t.zeros(8, 8, 1, dtype=t.int8)
             board.umpire(move)
-            one_hot = board_state_ignore_last_move_to_RRC(board.state, move, flip)
-            states.append(one_hot)
+            valid_moves_list = board.get_valid_moves()
+            for move in valid_moves_list:
+                moves_board[move // 8, move % 8] = 1
+            states.append(moves_board)
         states = t.stack(states, axis=0)
         game_stack.append(states)
     return t.stack(game_stack, axis=0)
@@ -108,5 +92,5 @@ def games_batch_to_state_stack_mine_yours_BLRRC(batch_str_moves):
 othello_functions = [
     games_batch_to_state_stack_BLRRC.__name__,
     games_batch_to_state_stack_mine_yours_BLRRC.__name__,
-    games_batch_no_last_move_to_state_stack_BLRRC.__name__,
+    games_batch_to_valid_moves_BLRRC.__name__,
 ]

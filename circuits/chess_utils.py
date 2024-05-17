@@ -648,10 +648,10 @@ othello_mine_yours_config = Config(
     num_cols=8,
 )
 
-othello_no_last_move_config = Config(
-    min_val=-1,
+othello_valid_moves_config = Config(
+    min_val=0,
     max_val=1,
-    custom_board_state_function=othello_utils.games_batch_no_last_move_to_state_stack_BLRRC,
+    custom_board_state_function=othello_utils.games_batch_to_valid_moves_BLRRC,
     num_rows=8,
     num_cols=8,
 )
@@ -813,7 +813,7 @@ all_configs = [
     pin_config,
     othello_config,
     othello_mine_yours_config,
-    othello_no_last_move_config,
+    othello_valid_moves_config,
     has_castling_rights_config,
     has_kingside_castling_rights_config,
     has_queenside_castling_rights_config,
