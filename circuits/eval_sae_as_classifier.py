@@ -61,12 +61,16 @@ def get_indexing_function_name(indexing_function: Optional[Callable]) -> str:
 def construct_chess_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
+    split: str,
     models_path: str = "models/",
     max_str_length: int = 256,
     device: str = "cpu",
     precompute_dataset: bool = True,
 ) -> dict:
-    dataset = load_dataset("adamkarvonen/chess_sae_individual_games_filtered", streaming=False)
+    dataset = load_dataset(
+        "adamkarvonen/chess_sae_individual_games_filtered",
+        streaming=False,
+    )
 
     meta_path = models_path + "meta.pkl"
 
@@ -75,7 +79,7 @@ def construct_chess_dataset(
 
     pgn_strings = []
     encoded_inputs = []
-    for i, example in enumerate(dataset["train"]):
+    for i, example in enumerate(dataset[split]):
         if i >= n_inputs:
             break
         pgn_string = example["text"][:max_str_length]
@@ -112,6 +116,7 @@ def construct_chess_dataset(
 def construct_othello_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
+    split: str,
     max_str_length: int = 59,
     device: str = "cpu",
     precompute_dataset: bool = True,
@@ -119,7 +124,7 @@ def construct_othello_dataset(
     dataset = load_dataset("adamkarvonen/othello_45MB_games", streaming=False)
     encoded_othello_inputs = []
     decoded_othello_inputs = []
-    for i, example in enumerate(dataset["train"]):
+    for i, example in enumerate(dataset[split]):
         if i >= n_inputs:
             break
         encoded_input = example["tokens"][:max_str_length]
@@ -566,6 +571,7 @@ def construct_dataset(
     othello: bool,
     custom_functions: list[Callable],
     n_inputs: int,
+    split: str,
     device: str,
     models_path: str = "models/",
     precompute_dataset: bool = True,
@@ -577,13 +583,18 @@ def construct_dataset(
         data = construct_chess_dataset(
             custom_functions,
             n_inputs,
+            split=split,
             device=device,
             models_path=models_path,
             precompute_dataset=precompute_dataset,
         )
     else:
         data = construct_othello_dataset(
-            custom_functions, n_inputs, device=device, precompute_dataset=precompute_dataset
+            custom_functions,
+            n_inputs,
+            split=split,
+            device=device,
+            precompute_dataset=precompute_dataset,
         )
 
     return data
@@ -632,7 +643,7 @@ def eval_sae_group(
     print("Constructing evaluation dataset...")
 
     model_name = get_model_name(othello)
-    data = construct_dataset(othello, custom_functions, n_inputs, device)
+    data = construct_dataset(othello, custom_functions, n_inputs, split="train", device=device)
 
     print("Starting evaluation...")
 
