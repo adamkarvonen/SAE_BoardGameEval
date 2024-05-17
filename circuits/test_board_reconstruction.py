@@ -51,6 +51,10 @@ def initialize_reconstruction_dict(
             "num_squares": 0,
             "num_true_positive_squares": 0,
             "num_false_positive_squares": 0,
+            "num_true_negative_squares": 0,
+            "num_false_negative_squares": 0,
+            "num_multiple_classes": 0,
+            "num_true_and_false_positive_squares": 0,
             "classifiers_per_token": counter_T.clone(),
             "classified_per_token": counter_T.clone(),
         }
@@ -173,11 +177,33 @@ def compare_constructed_to_true_boards(
             true_boards_BLRRC, "B L R1 R2 C -> T B L R1 R2 C", T=constructed_boards_TBLRRC.shape[0]
         )
 
+        multiple_classes_TBLRR = einops.reduce(
+            constructed_boards_TBLRRC, "T B L R1 R2 C -> T B L R1 R2", "sum"
+        )
+        multiple_classes_TBLRR = (multiple_classes_TBLRR > 1).int()
+        multiple_classes_T = einops.reduce(multiple_classes_TBLRR, "T B L R1 R2 -> T", "sum")
+
         true_positive_TBLRRC = (true_bords_TBLRRC == 1) & (constructed_boards_TBLRRC == 1)
         false_positive_TBLRRC = (true_bords_TBLRRC == 0) & (constructed_boards_TBLRRC == 1)
+        true_negative_TBLRRC = (true_bords_TBLRRC == 0) & (constructed_boards_TBLRRC == 0)
+        false_negative_TBLRRC = (true_bords_TBLRRC == 1) & (constructed_boards_TBLRRC == 0)
+
+        true_positive_TBLRR = einops.reduce(
+            true_positive_TBLRRC, "T B L R1 R2 C -> T B L R1 R2", "sum"
+        )
+        false_positive_TBLRR = einops.reduce(
+            false_positive_TBLRRC, "T B L R1 R2 C -> T B L R1 R2", "sum"
+        )
+
+        true_and_false_positive_TBLRR = (true_positive_TBLRR == 1) & (false_positive_TBLRR == 1)
 
         true_positive_T = einops.reduce(true_positive_TBLRRC, "T B L R1 R2 C -> T", "sum")
         false_positive_T = einops.reduce(false_positive_TBLRRC, "T B L R1 R2 C -> T", "sum")
+        true_negative_T = einops.reduce(true_negative_TBLRRC, "T B L R1 R2 C -> T", "sum")
+        false_negative_T = einops.reduce(false_negative_TBLRRC, "T B L R1 R2 C -> T", "sum")
+        true_and_false_positive_T = einops.reduce(
+            true_and_false_positive_TBLRR, "T B L R1 R2 -> T", "sum"
+        )
 
         batch_size = true_boards_BLRRC.shape[0]
         num_board_states = true_boards_BLRRC.shape[1]
@@ -193,6 +219,12 @@ def compare_constructed_to_true_boards(
         results[custom_function.__name__]["num_squares"] += num_squares
         results[custom_function.__name__]["num_true_positive_squares"] += true_positive_T
         results[custom_function.__name__]["num_false_positive_squares"] += false_positive_T
+        results[custom_function.__name__]["num_true_negative_squares"] += true_negative_T
+        results[custom_function.__name__]["num_false_negative_squares"] += false_negative_T
+        results[custom_function.__name__]["num_multiple_classes"] += multiple_classes_T
+        results[custom_function.__name__][
+            "num_true_and_false_positive_squares"
+        ] += true_and_false_positive_T
 
     return results
 
@@ -215,19 +247,13 @@ def calculate_F1_scores(
     epsilon = 1e-8
 
     for custom_function in custom_functions:
-        num_squares = results[custom_function.__name__]["num_squares"]
         num_true_positive_squares_T = results[custom_function.__name__]["num_true_positive_squares"]
         num_false_positive_squares_T = results[custom_function.__name__][
             "num_false_positive_squares"
         ]
         num_positives_T = num_true_positive_squares_T + num_false_positive_squares_T
 
-        T = num_positives_T.shape[0]
-        num_squares_T = torch.full((T,), num_squares, device=device)
-
-        false_negatives_T = (
-            num_squares_T - num_true_positive_squares_T - num_false_positive_squares_T
-        )
+        false_negatives_T = results[custom_function.__name__]["num_false_negative_squares"]
 
         precision = num_true_positive_squares_T / (num_positives_T + epsilon)
         recall = num_true_positive_squares_T / (
@@ -236,9 +262,27 @@ def calculate_F1_scores(
 
         # Calculate F1 score
         f1_scores = 2 * (precision * recall) / (precision + recall + epsilon)
-        results[custom_function.__name__]["precision"] = precision
-        results[custom_function.__name__]["recall"] = recall
-        results[custom_function.__name__]["f1_score"] = f1_scores
+        results[custom_function.__name__]["precision_per_class"] = precision
+        results[custom_function.__name__]["recall_per_class"] = recall
+        results[custom_function.__name__]["f1_score_per_class"] = f1_scores
+
+        num_true_and_false_positive_squares_T = results[custom_function.__name__][
+            "num_true_and_false_positive_squares"
+        ]
+
+        # Any square with both true and false positives is a false positive
+        num_true_positive_squares_T -= num_true_and_false_positive_squares_T
+        num_positives_T = num_true_positive_squares_T + num_false_positive_squares_T
+
+        precision = num_true_positive_squares_T / (num_positives_T + epsilon)
+        recall = num_true_positive_squares_T / (
+            num_true_positive_squares_T + false_negatives_T + epsilon
+        )
+
+        f1_scores = 2 * (precision * recall) / (precision + recall + epsilon)
+        results[custom_function.__name__]["precision_per_square"] = precision
+        results[custom_function.__name__]["recall_per_square"] = recall
+        results[custom_function.__name__]["f1_score_per_square"] = f1_scores
     return results
 
 
@@ -251,10 +295,10 @@ def print_out_results(results: dict, custom_functions: list[Callable]):
         for key in results[custom_function.__name__]:
             print(key, results[custom_function.__name__][key])
 
-        best_idx = results[custom_function.__name__]["f1_score"].argmax()
-        f1 = results[custom_function.__name__]["f1_score"][best_idx]
-        precision = results[custom_function.__name__]["precision"][best_idx]
-        recall = results[custom_function.__name__]["recall"][best_idx]
+        best_idx = results[custom_function.__name__]["f1_score_per_square"].argmax()
+        f1 = results[custom_function.__name__]["f1_score_per_square"][best_idx]
+        precision = results[custom_function.__name__]["precision_per_square"][best_idx]
+        recall = results[custom_function.__name__]["recall_per_square"][best_idx]
         num_true_positive_squares = results[custom_function.__name__]["num_true_positive_squares"][
             best_idx
         ]
@@ -447,7 +491,9 @@ def test_sae_group_board_reconstruction(
 
         # TODO: This is pretty hacky. It assumes that all autoencoder_group_paths are othello XOR chess
         # It shouldn't be too hard to make it smarter
-        data = eval_sae.construct_dataset(othello, custom_functions, n_inputs, device)
+        data = eval_sae.construct_dataset(
+            othello, custom_functions, n_inputs, split="test", device=device
+        )
 
         for autoencoder_path in folders:
 
