@@ -382,7 +382,8 @@ def test_board_reconstructions(
             results, custom_functions, constructed_boards, batch_data, device, mask
         )
 
-    results["n_inputs"] = n_inputs
+    hyperparameters = {"n_inputs": n_inputs}
+    results["hyperparameters"] = hyperparameters
     results = normalize_results(results, n_inputs, custom_functions)
     results = calculate_F1_scores(results, custom_functions, device)
 

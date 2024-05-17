@@ -216,6 +216,73 @@ def board_to_legal_moves_state(board: chess.Board, skill: Optional[int] = None) 
     return state
 
 
+def board_to_specific_fork(board:chess.Board, skill: Optional[int] = None, 
+               perspective='mine', attacker_piece=chess.KNIGHT, target_pieces=[chess.ROOK, chess.QUEEN, chess.KING]
+               ) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates True if a piece is attacking at least two higher value pieces and is not pinned.
+    Perspective can be 'mine' or 'other' to specify the player to move, after the most recent move."""
+
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    
+    # Determine the color of the knights to check based on the perspective
+    if perspective == "mine":
+        color = board.turn
+    elif perspective == "other":
+        color = not board.turn
+    else:
+        raise ValueError("Perspective must be 'mine' or 'other'")
+
+    # Loop through all pieces to find the knights of the given color
+    for square in board.pieces(attacker_piece, color):
+        if board.is_pinned(color, square):
+            # Skip if the knight is pinned
+            continue
+
+        attacks = board.attacks(square)
+        high_value_targets = 0
+
+        # Check each attack square to see if it's occupied by a high-value enemy piece
+        for attack_square in attacks:
+            attacked_piece = board.piece_at(attack_square)
+            if attacked_piece and attacked_piece.color != color:
+                if attacked_piece.piece_type in target_pieces:
+                    high_value_targets += 1
+        
+    # Check if the knight is attacking at least two high-value pieces
+    state[0, 0] = 1 if high_value_targets >= 2 else 0
+    return state
+
+def board_to_any_fork(board:chess.Board, skill: Optional[int] = None,
+                perspective='mine', attacker_piece=chess.KNIGHT, target_pieces=[chess.ROOK, chess.QUEEN, chess.KING]
+                ) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates True if any piece is attacking at least two higher value pieces and is not pinned.
+    Perspective can be 'mine', 'other' or 'any' to specify forks where the player to play (or any player) is the attacker."""
+
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+
+    # attacker target dict
+    attacker_target_dict = {
+        chess.PAWN: [chess.KNIGHT, chess.BISHOP, chess.ROOK, chess.QUEEN, chess.KING],
+        chess.KNIGHT: [chess.ROOK, chess.QUEEN, chess.KING],
+        chess.BISHOP: [chess.ROOK, chess.QUEEN, chess.KING],
+        chess.ROOK: [chess.QUEEN, chess.KING],
+    }
+    if perspective == 'mine' or perspective == 'any':
+        for attacker_piece in attacker_target_dict.keys():
+            for target_piece in attacker_target_dict[attacker_piece]:
+                if board_to_specific_fork(board, skill, 'mine', attacker_piece, [target_piece]):
+                    state[0, 0] += 1
+    if perspective == 'other' or perspective == 'any':
+        for attacker_piece in attacker_target_dict.keys():
+            for target_piece in attacker_target_dict[attacker_piece]:
+                if board_to_specific_fork(board, skill, 'other', attacker_piece, [target_piece]):
+                    state[0, 0] += 1
+
+    state = torch.clamp(state, 0, 1) # 1 if any fork, 0 if no fork
+    return state
+
 def board_to_has_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array indicates if the current player has castling rights (1 = yes, 0 = no)."""
