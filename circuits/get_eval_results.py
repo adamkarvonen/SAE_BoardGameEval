@@ -33,7 +33,6 @@ def get_evals(
         ae_bundle.ae,
         ae_bundle.buffer,
         max_len=ae_bundle.context_length,
-        batch_size=n_inputs,
         io="out",
         device=device,
     )
