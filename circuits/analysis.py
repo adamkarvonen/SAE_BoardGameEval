@@ -125,17 +125,25 @@ def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor, print_result
     classifiers_per_feature_F = classifiers_per_feature_TF[best_idx, ...]
     nonzero_elements_F = classifiers_per_feature_F[classifiers_per_feature_F != 0]
 
-    # Calculate minimum, average, and maximum of nonzero elements
-    min_value = torch.min(nonzero_elements_F)
-    average_value = torch.mean(nonzero_elements_F.float())
-    max_value = torch.max(nonzero_elements_F)
+    if nonzero_elements_F.numel() > 0:
+        # Calculate minimum, average, and maximum of nonzero elements
+        min_value = torch.min(nonzero_elements_F)
+        average_value = torch.mean(nonzero_elements_F.float())
+        max_value = torch.max(nonzero_elements_F)
 
-    if print_results:
-        print(f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}")
-        print(f"Total classified squares per feature per threshold: {classifiers_per_feature_T}")
-        print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
-        print("The following are counts of squares classified per classifier per feature:")
-        print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
+        if print_results:
+            print(
+                f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}"
+            )
+            print(
+                f"Total classified squares per feature per threshold: {classifiers_per_feature_T}"
+            )
+            print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
+            print("The following are counts of squares classified per classifier per feature:")
+            print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
+    else:
+        if print_results:
+            print("No nonzero elements found.")
 
 
 def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tensor:
@@ -156,21 +164,21 @@ def mask_initial_board_state(
     mine_state: bool = False,
 ) -> torch.Tensor:
 
-    T, F, R1, R2, C = on_tracker_TFRRC.shape
-    config = chess_utils.config_lookup[custom_function.__name__]
+    # T, F, R1, R2, C = on_tracker_TFRRC.shape
+    # config = chess_utils.config_lookup[custom_function.__name__]
 
-    initial_board = chess.Board()
-    initial_state_RR = custom_function(initial_board)
-    initial_state_11RR = einops.rearrange(initial_state_RR, "R1 R2 -> 1 1 R1 R2")
-    initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(config, device, initial_state_11RR)
-    initial_one_hot_RRC = einops.rearrange(initial_one_hot_11RRC, "1 1 R1 R2 C -> R1 R2 C")
+    # initial_board = chess.Board()
+    # initial_state_RR = custom_function(initial_board)
+    # initial_state_11RR = einops.rearrange(initial_state_RR, "R1 R2 -> 1 1 R1 R2")
+    # initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(config, device, initial_state_11RR)
+    # initial_one_hot_RRC = einops.rearrange(initial_one_hot_11RRC, "1 1 R1 R2 C -> R1 R2 C")
 
-    if mine_state:
-        initial_one_hot_RRC = transform_board_from_piece_color_to_piece(initial_one_hot_RRC)
+    # if mine_state:
+    #     initial_one_hot_RRC = transform_board_from_piece_color_to_piece(initial_one_hot_RRC)
 
-    mask_RRC = initial_one_hot_RRC == 1
-    mask_TFRRC = einops.repeat(mask_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
-    on_tracker_TFRRC[mask_TFRRC] = 0
+    # mask_RRC = initial_one_hot_RRC == 1
+    # mask_TFRRC = einops.repeat(mask_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
+    # on_tracker_TFRRC[mask_TFRRC] = 0
 
     if custom_function == chess_utils.board_to_piece_state:
         # Optionally, we also mask off the blank class
