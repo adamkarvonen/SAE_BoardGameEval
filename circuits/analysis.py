@@ -125,17 +125,25 @@ def analyze_feature_labels(above_counts_binary_TFRRC: torch.Tensor, print_result
     classifiers_per_feature_F = classifiers_per_feature_TF[best_idx, ...]
     nonzero_elements_F = classifiers_per_feature_F[classifiers_per_feature_F != 0]
 
-    # Calculate minimum, average, and maximum of nonzero elements
-    min_value = torch.min(nonzero_elements_F)
-    average_value = torch.mean(nonzero_elements_F.float())
-    max_value = torch.max(nonzero_elements_F)
+    if nonzero_elements_F.numel() > 0:
+        # Calculate minimum, average, and maximum of nonzero elements
+        min_value = torch.min(nonzero_elements_F)
+        average_value = torch.mean(nonzero_elements_F.float())
+        max_value = torch.max(nonzero_elements_F)
 
-    if print_results:
-        print(f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}")
-        print(f"Total classified squares per feature per threshold: {classifiers_per_feature_T}")
-        print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
-        print("The following are counts of squares classified per classifier per feature:")
-        print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
+        if print_results:
+            print(
+                f"Nonzero classifiers per feature per threshold: {nonzero_classifiers_per_feature_T}"
+            )
+            print(
+                f"Total classified squares per feature per threshold: {classifiers_per_feature_T}"
+            )
+            print(f"Out of {total_features} features, {nonzero_features} were classifiers.")
+            print("The following are counts of squares classified per classifier per feature:")
+            print(f"Min count: {min_value}, average count: {average_value}, max count: {max_value}")
+    else:
+        if print_results:
+            print("No nonzero elements found.")
 
 
 def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tensor:
