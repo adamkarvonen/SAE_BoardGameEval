@@ -81,6 +81,7 @@ def get_ae_bundle(
 
     # rangell: this is a super hacky way to get the correct dictionary class from the config
     # TODO (rangell): make this better in the future.
+    # old: ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
     config_args = []
     for k, v in config["trainer"].items():
         if k not in ["trainer_class", "sparsity_penalty"]:
@@ -91,7 +92,6 @@ def get_ae_bundle(
     config_str = ", ".join(config_args)
     ae = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__.from_pretrained(
         autoencoder_model_path, device=device)
-    #ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
 
     context_length = config["buffer"]["ctx_len"]
     #layer = config["trainer"]["layer"]
