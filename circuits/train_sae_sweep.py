@@ -3,10 +3,17 @@
 import torch as t
 import numpy as np
 import itertools
+import pickle
 
 from nnsight import LanguageModel
 
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
+from circuits.utils import (
+    chess_hf_dataset_to_generator,
+    othello_hf_dataset_to_generator,
+    get_model,
+    get_submodule,
+)
 
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
@@ -17,7 +24,7 @@ from dictionary_learning.trainers.jump import JumpSAETrainer
 from dictionary_learning.trainers.standard_new import StandardTrainerNew
 from dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
-from dictionary_learning.buffer import ActivationBuffer
+from dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
 from dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew, JumpAutoEncoder
 
 from IPython import embed
@@ -25,12 +32,33 @@ from IPython import embed
 #%% 
 DEVICE = 'cuda:0'
 
-# load chess-gpt
-tokenizer = NanogptTokenizer("models/meta.pkl")
-model = convert_nanogpt_model("models/lichess_8layers_ckpt_no_optimizer.pt", t.device(DEVICE))
-model = LanguageModel(model, device_map=DEVICE, tokenizer=tokenizer).to(DEVICE)
-submodule = model.transformer.h[5]
-activation_dim = model.config.hidden_size
+layer = 5
+othello = True
+
+if not othello:
+    with open("models/meta.pkl", "rb") as f:
+        meta = pickle.load(f)
+
+    context_length = 256
+    model_name = "adamkarvonen/8LayerChessGPT2"
+    dataset_name = "adamkarvonen/chess_sae_text"
+    data = chess_hf_dataset_to_generator(
+        dataset_name, meta, context_length=context_length, split="train", streaming=True
+    )
+    model_type = "chess"
+else:
+    context_length = 59
+    model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+    dataset_name = "taufeeque/othellogpt"
+    data = othello_hf_dataset_to_generator(
+        dataset_name, context_length=context_length, split="train", streaming=True
+    )
+    model_type = "othello"
+
+model = get_model(model_name, DEVICE)
+submodule = get_submodule(model_name, layer, model)
+
+activation_dim = 512  # output dimension of the layer
 
 buffer_size = int(1e4/1)
 llm_batch_size = 256
@@ -38,20 +66,19 @@ sae_batch_size = 8192
 
 num_tokens = 300_000_000
 
-# load chess data
-generator = hf_dataset_to_generator("adamkarvonen/chess_sae_text")
-activation_buffer = ActivationBuffer(
-    data=generator,
-    model=model,
-    submodule=submodule,
-    d_submodule=activation_dim,
-    io='out',
-    n_ctxs=buffer_size,
+activation_buffer = NNsightActivationBuffer(
+    data,
+    model,
+    submodule,
+    n_ctxs=8e3,
     ctx_len=256,
-    refresh_batch_size=llm_batch_size, # batches for buffer internal activations
-    out_batch_size=sae_batch_size, # batches for training
-    device=DEVICE
+    refresh_batch_size=llm_batch_size,
+    out_batch_size=sae_batch_size,
+    io="out",
+    d_submodule=activation_dim,
+    device=DEVICE,
 )
+
 
 #%% 
 # Training
@@ -80,23 +107,23 @@ anneal_start_ = t.logspace(start=3.7, end=4.2, steps=3)
 n_sparsity_updates_ = [10]
 # old: initial_sparsity_penalty_ = t.logspace(-1.4,-1.1, 5)
 
-learning_rate_ = t.tensor([5e-6, 5e-5, 5e-4])
-initial_sparsity_penalty_ = t.logspace(-0.2231, 1.6094, 5) # [0.8, 5]
-param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
-
-for i, param_setting in enumerate(param_combinations):
-    lr, expansion_factor, sp = param_setting
-    trainer_configs.append({
-        'trainer' : StandardTrainerNew,
-        'dict_class' : AutoEncoderNew,
-        'activation_dim' : activation_dim,
-        'dict_size' : expansion_factor.item()*activation_dim,
-        'lr' : lr.item(),
-        'l1_penalty' : sp.item(),
-        'lambda_warm_steps' : warmup_steps,
-        'seed' : seed,
-        'wandb_name' : f'StandardTrainerNew-Anthropic-chess-{i}',
-    })
+#learning_rate_ = t.tensor([5e-6, 5e-5, 5e-4])
+#initial_sparsity_penalty_ = t.logspace(-0.2231, 1.6094, 5) # [0.8, 5]
+#param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
+#
+#for i, param_setting in enumerate(param_combinations):
+#    lr, expansion_factor, sp = param_setting
+#    trainer_configs.append({
+#        'trainer' : StandardTrainerNew,
+#        'dict_class' : AutoEncoderNew,
+#        'activation_dim' : activation_dim,
+#        'dict_size' : expansion_factor.item()*activation_dim,
+#        'lr' : lr.item(),
+#        'l1_penalty' : sp.item(),
+#        'lambda_warm_steps' : warmup_steps,
+#        'seed' : seed,
+#        'wandb_name' : f'StandardTrainerNew-Anthropic-othello-{i}',
+#    })
    
 
 #learning_rate_ = t.tensor([5e-6, 5e-5, 5e-4])
@@ -129,7 +156,7 @@ for i, param_setting in enumerate(param_combinations):
 #        'lambda_warm_steps' : warmup_steps,
 #        'steps' : steps,
 #        'seed' : seed,
-#        'wandb_name' : f'PAnnealTrainerNew-Anthropic-chess-{i}',
+#        'wandb_name' : f'PAnnealTrainerNew-Anthropic-othello-{i}',
 #    })
 
 
@@ -149,7 +176,7 @@ for i, param_setting in enumerate(param_combinations):
 #        'warmup_steps' : warmup_steps,
 #        'resample_steps' : resample_steps,
 #        'seed' : seed,
-#        'wandb_name' : f'StandardTrainer-chess-{i}',
+#        'wandb_name' : f'StandardTrainer-othello-{i}',
 #    })
    
 
@@ -184,29 +211,29 @@ for i, param_setting in enumerate(param_combinations):
 #        'resample_steps' : resample_steps,
 #        'steps' : steps,
 #        'seed' : seed,
-#        'wandb_name' : f'PAnnealTrainer-chess-{i}',
+#        'wandb_name' : f'PAnnealTrainer-othello-{i}',
 #    })
 
 
-#learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
-#initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5)
-#param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
-#
-#for i, param_setting in enumerate(param_combinations):
+learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
+initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5)
+param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
 
-#    lr, expansion_factor, sp = param_setting
-#    trainer_configs.append({
-#        'trainer' : GatedSAETrainer,
-#        'dict_class' : GatedAutoEncoder,
-#        'activation_dim' : activation_dim,
-#        'dict_size' : expansion_factor.item()*activation_dim,
-#        'lr' : lr.item(),
-#        'l1_penalty' : sp.item(),
-#        'warmup_steps' : warmup_steps,
-#        'resample_steps' : resample_steps,
-#        'seed' : seed,
-#        'wandb_name' : f'GatedSAETrainer-chess-{i}',
-#    })
+for i, param_setting in enumerate(param_combinations):
+
+    lr, expansion_factor, sp = param_setting
+    trainer_configs.append({
+        'trainer' : GatedSAETrainer,
+        'dict_class' : GatedAutoEncoder,
+        'activation_dim' : activation_dim,
+        'dict_size' : expansion_factor.item()*activation_dim,
+        'lr' : lr.item(),
+        'l1_penalty' : sp.item(),
+        'warmup_steps' : warmup_steps,
+        'resample_steps' : resample_steps,
+        'seed' : seed,
+        'wandb_name' : f'GatedSAETrainer-othello-{i}',
+    })
 
 
 #learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
@@ -240,13 +267,13 @@ for i, param_setting in enumerate(param_combinations):
 #        'resample_steps' : resample_steps,
 #        'steps' : steps,
 #        'seed' : seed,
-#        'wandb_name' : f'GatedAnnealTrainer-chess-{i}',
+#        'wandb_name' : f'GatedAnnealTrainer-othello-{i}',
 #    })
 
 
 print(f"len trainer configs: {len(trainer_configs)}")
 
-save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-17_chess-standard_new/'
+save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-17_othello-gated/'
 #%%
 trainSAE(
     data = activation_buffer, 
