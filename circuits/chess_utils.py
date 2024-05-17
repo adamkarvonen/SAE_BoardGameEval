@@ -3,6 +3,7 @@ import pandas as pd
 import torch
 from torch.nn import functional as F
 from typing import Callable, Optional
+from collections import defaultdict
 from dataclasses import dataclass
 from jaxtyping import Int, Float, jaxtyped
 from beartype import beartype
@@ -353,6 +354,143 @@ def board_to_number_of_pieces(board: chess.Board, skill: Optional[int] = None) -
     return state
 
 
+def board_to_has_bishop_pair(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether the player to move still has both bishops."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    pieces = board.occupied_co[current_turn]
+    num_bishops = chess.popcount(pieces & board.bishops)
+    state[0][0] = 1 if num_bishops >= 2 else 0
+    return state
+
+
+def board_to_has_mate_threat(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether the opponent could mate the current side in a single move
+    if the turn was passed to the opponent."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    
+    # overwrite who is next to move
+    board = board.mirror()
+    
+    # simulate legal moves and evaluate whether there is a mate threat on the board
+    for move in list(board.legal_moves):
+        board.push(move)
+        if board.is_checkmate():
+            state[0][0] = 1
+            board.pop()
+            return state
+        board.pop()
+    return state
+
+
+def board_to_can_capture_queen(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether the player to move can capture the opponents queen."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    opponent_color = chess.WHITE if current_turn == chess.BLACK else chess.BLACK
+    opponent_queen_square = None
+
+    # Locate the opponent's queen on the board
+    for square, piece in board.piece_map().items():
+        if piece.piece_type == chess.QUEEN and piece.color == opponent_color:
+            opponent_queen_square = square
+            break
+    
+    # return 0 if there is no queen on the board
+    if opponent_queen_square is None:
+        return state  
+    
+    # Check if any legal move captures the opponent's queen
+    for move in board.legal_moves:
+        if move.to_square == opponent_queen_square and board.is_capture(move):
+            state[0][0] = 1
+            return state
+    return state
+
+
+def board_to_has_queen(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether the player to move still has its queen."""
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    current_turn = board.turn
+    pieces = board.occupied_co[current_turn]
+    num_queens = chess.popcount(pieces & board.queens)
+    state[0][0] = 1 if num_queens >= 1 else 0
+    return state
+
+
+def rooks_are_connected(rook1, rook2, board):
+    """Helper function to determine if two rooks are connected on the board."""
+    if chess.square_file(rook1) == chess.square_file(rook2):  # Same file
+        step = 8 if rook1 < rook2 else -8
+    elif chess.square_rank(rook1) == chess.square_rank(rook2):  # Same rank
+        step = 1 if rook1 < rook2 else -1
+    else:
+        return False  # Not aligned, hence not connected
+
+    # Check if any squares between the two rooks contain pieces
+    for square in range(rook1 + step, rook2, step):
+        if board.piece_at(square):
+            return False
+
+    return True
+
+
+def board_to_has_connected_rooks(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether the current player has connected rooks (1 = yes, 0 = no).
+    """
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    rook_positions = []
+
+    # Collect positions of all rooks belonging to the current player
+    for square in chess.SQUARES:
+        piece = board.piece_at(square)
+        if piece and piece.piece_type == chess.ROOK and piece.color == board.turn:
+            rook_positions.append(square)
+
+    # Check if there are at least two rooks; if not, they can't be connected
+    if len(rook_positions) < 2:
+        return state
+
+    # Check all pairs of rooks to see if they are connected
+    for i in range(len(rook_positions)):
+        for j in range(i + 1, len(rook_positions)):
+            if rooks_are_connected(rook_positions[i], rook_positions[j], board):
+                state[0][0] = 1
+                return state
+
+    return state
+
+
+def board_to_ambiguous_moves(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+    """Given a chess board object, return a 1x1 torch.Tensor.
+    The 1x1 array indicates whether there are any situations where disambiguating by rank or file is necessary for notation (1 = yes, 0 = no).
+    """
+    state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
+    piece_moves = defaultdict(list)
+
+    # Collect all legal moves and the pieces that can perform them
+    for move in board.legal_moves:
+        piece = board.piece_at(move.from_square)
+        if piece and piece.color == board.turn:
+            piece_moves[(piece.piece_type, move.to_square)].append(move.from_square)
+
+    # Check for ambiguous moves where disambiguation is required
+    for (piece_type, to_square), from_squares in piece_moves.items():
+        if len(from_squares) > 1:
+            # Check if there is more than one unique file or rank among the from_squares
+            if len(set(chess.square_file(sq) for sq in from_squares)) > 1 or \
+               len(set(chess.square_rank(sq) for sq in from_squares)) > 1:
+                state[0][0] = 1
+                return state
+
+    return state
+
+
 @dataclass
 class Config:
     min_val: int
@@ -540,6 +678,61 @@ num_pieces_config = Config(
     num_cols=1,
 )
 
+has_bishop_pair_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_bishop_pair,
+    linear_probe_name="has_bishop_pair",
+    num_rows=1,
+    num_cols=1,
+)
+
+
+has_mate_threat_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_mate_threat,
+    linear_probe_name="has_mate_threat",
+    num_rows=1,
+    num_cols=1,
+)
+
+can_capture_queen_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_can_capture_queen,
+    linear_probe_name="can_capture_queen",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_queen_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_queen,
+    linear_probe_name="has_queen",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_connected_rooks_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_has_connected_rooks,
+    linear_probe_name="has_connected_rooks",
+    num_rows=1,
+    num_cols=1,
+)
+
+ambiguous_moves_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_ambiguous_moves,
+    linear_probe_name="ambiguous_moves",
+    num_rows=1,
+    num_cols=1,
+)
+
 
 all_configs = [
     piece_config,
@@ -563,7 +756,13 @@ all_configs = [
     can_claim_draw_config,
     can_check_next_config,
     material_config,
-    num_pieces_config
+    num_pieces_config,
+    has_bishop_pair_config,
+    has_mate_threat_config,
+    can_capture_queen_config,
+    has_queen_config,
+    has_connected_rooks_config,
+    ambiguous_moves_config,
 ]
 
 config_lookup = {config.custom_board_state_function.__name__: config for config in all_configs}

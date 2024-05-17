@@ -231,6 +231,70 @@ def test_board_to_number_of_pieces():
     board = chess_utils.typical_pgn_string_to_board(test_str)
     expected_answer = torch.tensor([[14]], dtype=torch.int8)
     assert torch.equal(chess_utils.board_to_number_of_pieces(board), expected_answer)
-    
-    
-test_board_to_number_of_pieces()
+
+
+def test_board_to_has_bishop_pair():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_bishop_pair(initial_board), expected_answer)
+
+    test_str = "1. e4 d5 2. Bc4 dxc4" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_bishop_pair(board), expected_answer)
+
+
+def test_board_to_has_mate_threat():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_mate_threat(initial_board), expected_answer)
+
+    test_str = "1. e4 f6 2. Nc3 g5 3.d3" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    #print("mate thres", chess_utils.board_to_has_mate_threat(board))
+    assert torch.equal(chess_utils.board_to_has_mate_threat(board), expected_answer)
+
+
+def test_board_to_can_capture_queen():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_can_capture_queen(initial_board), expected_answer)
+
+    test_str = "1. e4 g6 2. Qh5" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_can_capture_queen(board), expected_answer)
+
+
+def test_board_to_has_queen():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_queen(initial_board), expected_answer)
+
+    test_str = "1. e4 g6 2. Qh5 gxh5" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_queen(board), expected_answer)
+
+
+def test_board_to_has_connected_rooks():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_connected_rooks(initial_board), expected_answer)
+
+    test_str = "1. a4 d6 2. Ra3 e6 3. h4 f6 4. Rhh3 c6" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_has_connected_rooks(board), expected_answer)
+  
+  
+def test_board_to_has_ambiguous_moves():
+    initial_board = chess.Board()
+    expected_answer = torch.tensor([[0]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_ambiguous_moves(initial_board), expected_answer)
+
+    test_str = "1. a4 d6 2. Ra3 e6 3. h4 f6 4. Rhh3 c6" 
+    board = chess_utils.typical_pgn_string_to_board(test_str)
+    expected_answer = torch.tensor([[1]], dtype=torch.int8)
+    assert torch.equal(chess_utils.board_to_ambiguous_moves(board), expected_answer)
