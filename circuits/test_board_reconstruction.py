@@ -271,12 +271,14 @@ def calculate_F1_scores(
         ]
 
         # Any square with both true and false positives is a false positive
-        num_true_positive_squares_T -= num_true_and_false_positive_squares_T
-        num_positives_T = num_true_positive_squares_T + num_false_positive_squares_T
+        adjusted_true_positive_squares_T = (
+            num_true_positive_squares_T - num_true_and_false_positive_squares_T
+        )
+        adjusted_positives_T = adjusted_true_positive_squares_T + num_false_positive_squares_T
 
-        precision = num_true_positive_squares_T / (num_positives_T + epsilon)
-        recall = num_true_positive_squares_T / (
-            num_true_positive_squares_T + false_negatives_T + epsilon
+        precision = adjusted_true_positive_squares_T / (adjusted_positives_T + epsilon)
+        recall = adjusted_true_positive_squares_T / (
+            adjusted_true_positive_squares_T + false_negatives_T + epsilon
         )
 
         f1_scores = 2 * (precision * recall) / (precision + recall + epsilon)
