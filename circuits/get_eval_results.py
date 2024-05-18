@@ -29,13 +29,23 @@ def get_evals(
         autoencoder_path, n_inputs, model_path, model_name, data, device, dataset_size, othello
     )
 
-    eval_results = evaluate(
-        ae_bundle.ae,
-        ae_bundle.buffer,
-        max_len=ae_bundle.context_length,
-        io="out",
-        device=device,
-    )
+    if othello:
+        eval_results = evaluate(
+            ae_bundle.ae,
+            ae_bundle.buffer,
+            max_len=ae_bundle.context_length,
+            io="out",
+            device=device,
+            tracer_kwargs={}
+        )
+    else:
+        eval_results = evaluate(
+            ae_bundle.ae,
+            ae_bundle.buffer,
+            max_len=ae_bundle.context_length,
+            io="out",
+            device=device,
+        )
 
     results = {}
     hyperparameters = {
