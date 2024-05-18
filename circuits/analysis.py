@@ -183,6 +183,8 @@ def mask_initial_board_state(
     if custom_function == chess_utils.board_to_piece_state:
         # Optionally, we also mask off the blank class
         on_tracker_TFRRC[:, :, :, :, 6] = 0
+    if custom_function == chess_utils.board_to_piece_color_state:
+        on_tracker_TFRRC[:, :, :, :, 1] = 0
 
     return on_tracker_TFRRC
 
@@ -260,14 +262,16 @@ def analyze_board_tracker(
     high_threshold: float,
     low_threshold: float,
     significance_threshold: int,
+    misc_stats: dict,
     mine_state: bool = False,
     mask: bool = False,
     print_results: bool = True,
     verbose: bool = False,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, dict]:
 
     othello = False
     function_name = function.__name__
+    misc_stats[function_name] = {}
 
     if function_name in othello_utils.othello_functions:
         othello = True
@@ -367,7 +371,10 @@ def analyze_board_tracker(
         print(classifier_coverage_RR)
         print()
 
-    return above_counts_binary_TFRRC
+    misc_stats[function_name]["high_precision_counts_per_T"] = above_counts_T
+    misc_stats[function_name]["high_precision_and_recall_counts_per_T"] = classifier_counts_T
+
+    return above_counts_binary_TFRRC, misc_stats
 
 
 def add_off_tracker(results: dict, custom_functions: list[Callable], device: str) -> dict:
@@ -401,7 +408,7 @@ def analyze_results_dict(
     print_results: bool = True,
     save_results: bool = True,
     mask: bool = False,
-) -> dict:
+) -> tuple[dict, dict]:
     custom_functions = []
 
     for key in results:
@@ -438,11 +445,14 @@ def analyze_results_dict(
         "indexing_function": results["hyperparameters"]["indexing_function"],
     }
 
+    misc_stats = {}
+
     for custom_function in custom_functions:
         func_name = custom_function.__name__
+        misc_stats[func_name] = {}
         config = chess_utils.config_lookup[func_name]
         if config.num_rows == 8:
-            above_counts_binary_TFRRC = analyze_board_tracker(
+            above_counts_binary_TFRRC, misc_stats = analyze_board_tracker(
                 results,
                 custom_function,
                 "on",
@@ -451,6 +461,7 @@ def analyze_results_dict(
                 high_threshold,
                 low_threshold,
                 significance_threshold,
+                misc_stats,
                 mask=mask,
                 print_results=print_results,
                 verbose=verbose,
@@ -487,11 +498,14 @@ def analyze_results_dict(
                 print(classifier_counts_T)
                 print()
 
+            misc_stats[func_name]["high_precision_counts_per_T"] = above_counts_T
+            misc_stats[func_name]["high_precision_and_recall_counts_per_T"] = classifier_counts_T
+
     if save_results:
         with open(output_path, "wb") as write_file:
             pickle.dump(feature_labels, write_file)
 
-    return feature_labels
+    return feature_labels, misc_stats
 
 
 def analyze_sae_group(

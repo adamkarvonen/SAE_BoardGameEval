@@ -385,7 +385,14 @@ def test_board_reconstructions(
         encoded_inputs_BL = torch.tensor(encoded_inputs_BL).to(device)
 
         batch_data = eval_sae.get_data_batch(
-            data, pgn_strings_BL, start, end, custom_functions, device, precomputed=precomputed
+            data,
+            pgn_strings_BL,
+            start,
+            end,
+            custom_functions,
+            device,
+            precomputed=precomputed,
+            othello=othello,
         )
 
         all_activations_FBL, encoded_token_inputs = collect_activations_batch(

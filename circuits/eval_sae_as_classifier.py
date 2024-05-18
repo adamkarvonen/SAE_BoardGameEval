@@ -189,11 +189,17 @@ def get_data_batch(
     custom_functions: list[Callable],
     device: torch.device,
     precomputed: bool = True,
+    othello: bool = False,
 ) -> dict:
     batch_data = {}
     if precomputed:
         for func_name in data:
             batch_data[func_name] = data[func_name][start:end]
+        return batch_data
+
+    if othello:
+        for custom_function in custom_functions:
+            batch_data[custom_function.__name__] = custom_function(inputs_BL).to(device)
         return batch_data
 
     # Else construct it on the fly
@@ -484,7 +490,14 @@ def aggregate_statistics(
         end = (i + 1) * batch_size
         pgn_strings_BL = pgn_strings[start:end]
         batch_data = get_data_batch(
-            data, pgn_strings_BL, start, end, custom_functions, device, precomputed=precomputed
+            data,
+            pgn_strings_BL,
+            start,
+            end,
+            custom_functions,
+            device,
+            precomputed=precomputed,
+            othello=othello,
         )
 
         if precomputed:
@@ -613,6 +626,35 @@ def get_recommended_custom_functions(othello: bool) -> list[Callable]:
         custom_functions = [
             othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
         ]
+    return custom_functions
+
+
+def get_all_chess_functions(othello: bool) -> list[Callable]:
+    if othello:
+        raise ValueError("This is a chess function")
+    custom_functions = [
+        chess_utils.board_to_piece_state,
+        chess_utils.board_to_piece_color_state,
+        chess_utils.board_to_pin_state,
+        chess_utils.board_to_threat_state,
+        chess_utils.board_to_check_state,
+        chess_utils.board_to_legal_moves_state,
+        chess_utils.board_to_specific_fork,
+        chess_utils.board_to_any_fork,
+        chess_utils.board_to_has_castling_rights,
+        chess_utils.board_to_has_queenside_castling_rights,
+        chess_utils.board_to_has_kingside_castling_rights,
+        chess_utils.board_to_has_legal_en_passant,
+        chess_utils.board_to_pseudo_legal_moves_state,
+        chess_utils.board_to_can_claim_draw,
+        chess_utils.board_to_can_check_next,
+        chess_utils.board_to_has_bishop_pair,
+        chess_utils.board_to_has_mate_threat,
+        chess_utils.board_to_can_capture_queen,
+        chess_utils.board_to_has_queen,
+        chess_utils.board_to_has_connected_rooks,
+        chess_utils.board_to_ambiguous_moves,
+    ]
     return custom_functions
 
 

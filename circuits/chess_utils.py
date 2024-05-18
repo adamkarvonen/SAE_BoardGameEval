@@ -216,15 +216,20 @@ def board_to_legal_moves_state(board: chess.Board, skill: Optional[int] = None) 
     return state
 
 
-def board_to_specific_fork(board:chess.Board, skill: Optional[int] = None, 
-               perspective='mine', attacker_piece=chess.KNIGHT, target_pieces=[chess.ROOK, chess.QUEEN, chess.KING]
-               ) -> torch.Tensor:
+def board_to_specific_fork(
+    board: chess.Board,
+    skill: Optional[int] = None,
+    perspective="mine",
+    attacker_piece=chess.KNIGHT,
+    target_pieces=[chess.ROOK, chess.QUEEN, chess.KING],
+) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array indicates True if a piece is attacking at least two higher value pieces and is not pinned.
-    Perspective can be 'mine' or 'other' to specify the player to move, after the most recent move."""
+    Perspective can be 'mine' or 'other' to specify the player to move, after the most recent move.
+    """
 
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
-    
+
     # Determine the color of the knights to check based on the perspective
     if perspective == "mine":
         color = board.turn
@@ -248,17 +253,23 @@ def board_to_specific_fork(board:chess.Board, skill: Optional[int] = None,
             if attacked_piece and attacked_piece.color != color:
                 if attacked_piece.piece_type in target_pieces:
                     high_value_targets += 1
-        
+
     # Check if the knight is attacking at least two high-value pieces
     state[0, 0] = 1 if high_value_targets >= 2 else 0
     return state
 
-def board_to_any_fork(board:chess.Board, skill: Optional[int] = None,
-                perspective='mine', attacker_piece=chess.KNIGHT, target_pieces=[chess.ROOK, chess.QUEEN, chess.KING]
-                ) -> torch.Tensor:
+
+def board_to_any_fork(
+    board: chess.Board,
+    skill: Optional[int] = None,
+    perspective="mine",
+    attacker_piece=chess.KNIGHT,
+    target_pieces=[chess.ROOK, chess.QUEEN, chess.KING],
+) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array indicates True if any piece is attacking at least two higher value pieces and is not pinned.
-    Perspective can be 'mine', 'other' or 'any' to specify forks where the player to play (or any player) is the attacker."""
+    Perspective can be 'mine', 'other' or 'any' to specify forks where the player to play (or any player) is the attacker.
+    """
 
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
 
@@ -269,19 +280,20 @@ def board_to_any_fork(board:chess.Board, skill: Optional[int] = None,
         chess.BISHOP: [chess.ROOK, chess.QUEEN, chess.KING],
         chess.ROOK: [chess.QUEEN, chess.KING],
     }
-    if perspective == 'mine' or perspective == 'any':
+    if perspective == "mine" or perspective == "any":
         for attacker_piece in attacker_target_dict.keys():
             for target_piece in attacker_target_dict[attacker_piece]:
-                if board_to_specific_fork(board, skill, 'mine', attacker_piece, [target_piece]):
+                if board_to_specific_fork(board, skill, "mine", attacker_piece, [target_piece]):
                     state[0, 0] += 1
-    if perspective == 'other' or perspective == 'any':
+    if perspective == "other" or perspective == "any":
         for attacker_piece in attacker_target_dict.keys():
             for target_piece in attacker_target_dict[attacker_piece]:
-                if board_to_specific_fork(board, skill, 'other', attacker_piece, [target_piece]):
+                if board_to_specific_fork(board, skill, "other", attacker_piece, [target_piece]):
                     state[0, 0] += 1
 
-    state = torch.clamp(state, 0, 1) # 1 if any fork, 0 if no fork
+    state = torch.clamp(state, 0, 1)  # 1 if any fork, 0 if no fork
     return state
+
 
 def board_to_has_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
@@ -292,7 +304,10 @@ def board_to_has_castling_rights(board: chess.Board, skill: Optional[int] = None
     state[0, 0] = 1 if board.has_castling_rights(current_turn) else 0
     return state
 
-def board_to_has_kingside_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+
+def board_to_has_kingside_castling_rights(
+    board: chess.Board, skill: Optional[int] = None
+) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
     The 1x1 array indicates if the current player has kingside castling rights (1 = yes, 0 = no)."""
 
@@ -301,14 +316,19 @@ def board_to_has_kingside_castling_rights(board: chess.Board, skill: Optional[in
     state[0, 0] = 1 if board.has_kingside_castling_rights(current_turn) else 0
     return state
 
-def board_to_has_queenside_castling_rights(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+
+def board_to_has_queenside_castling_rights(
+    board: chess.Board, skill: Optional[int] = None
+) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
-    The 1x1 array indicates if the current player has queenside castling rights (1 = yes, 0 = no)."""
+    The 1x1 array indicates if the current player has queenside castling rights (1 = yes, 0 = no).
+    """
 
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     current_turn = board.turn
     state[0, 0] = 1 if board.has_queenside_castling_rights(current_turn) else 0
     return state
+
 
 def board_to_has_legal_en_passant(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
@@ -317,14 +337,18 @@ def board_to_has_legal_en_passant(board: chess.Board, skill: Optional[int] = Non
     state[0, 0] = 1 if board.has_legal_en_passant() else 0
     return state
 
+
 def board_to_is_stalemate(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
-     The 1x1 array indicates whether the game is a stalemate (1 = yes, 0 = no)."""
+    The 1x1 array indicates whether the game is a stalemate (1 = yes, 0 = no)."""
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     state[0][0] = 1 if board.is_stalemate() else 0
     return state
 
-def board_to_pseudo_legal_moves_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
+
+def board_to_pseudo_legal_moves_state(
+    board: chess.Board, skill: Optional[int] = None
+) -> torch.Tensor:
     """Return an 8x8 torch.Tensor indicating squares where the current player has pseudo-legal moves.
     Pseudo-legal moves might leave or put a king in check, but are otherwise valid.
 
@@ -332,7 +356,7 @@ def board_to_pseudo_legal_moves_state(board: chess.Board, skill: Optional[int] =
     In the 8x8 array, row 0 corresponds to A1-H1 (from White's perspective), row 1 to A2-H2, etc.
     """
     MOVING_COLOR = board.turn
-    
+
     # Initialize the state array with all zeros
     state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
 
@@ -343,9 +367,10 @@ def board_to_pseudo_legal_moves_state(board: chess.Board, skill: Optional[int] =
             state[to_square // 8, to_square % 8] = 1
     return state
 
+
 def board_to_can_claim_draw(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return a 1x1 torch.Tensor.
-     The 1x1 array indicates whether the player to move can claim a draw (1 = yes, 0 = no)."""
+    The 1x1 array indicates whether the player to move can claim a draw (1 = yes, 0 = no)."""
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     state[0][0] = 1 if board.can_claim_draw() else 0
     return state
@@ -405,7 +430,13 @@ def board_to_material(board: chess.Board, skill: Optional[int] = None) -> torch.
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     current_turn = board.turn
     pieces = board.occupied_co[current_turn]
-    material = chess.popcount(pieces & board.pawns) + 3 * chess.popcount(pieces & board.knights) + 3 * chess.popcount(pieces & board.bishops) + 5 * chess.popcount(pieces & board.rooks) + 9 * chess.popcount(pieces & board.queens)
+    material = (
+        chess.popcount(pieces & board.pawns)
+        + 3 * chess.popcount(pieces & board.knights)
+        + 3 * chess.popcount(pieces & board.bishops)
+        + 5 * chess.popcount(pieces & board.rooks)
+        + 9 * chess.popcount(pieces & board.queens)
+    )
     state[0][0] = material
     return state
 
@@ -416,7 +447,13 @@ def board_to_number_of_pieces(board: chess.Board, skill: Optional[int] = None) -
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
     current_turn = board.turn
     pieces = board.occupied_co[current_turn]
-    num_pieces = chess.popcount(pieces & board.pawns) + chess.popcount(pieces & board.knights) + chess.popcount(pieces & board.bishops) + chess.popcount(pieces & board.rooks) + chess.popcount(pieces & board.queens)
+    num_pieces = (
+        chess.popcount(pieces & board.pawns)
+        + chess.popcount(pieces & board.knights)
+        + chess.popcount(pieces & board.bishops)
+        + chess.popcount(pieces & board.rooks)
+        + chess.popcount(pieces & board.queens)
+    )
     state[0][0] = num_pieces
     return state
 
@@ -437,10 +474,10 @@ def board_to_has_mate_threat(board: chess.Board, skill: Optional[int] = None) ->
     The 1x1 array indicates whether the opponent could mate the current side in a single move
     if the turn was passed to the opponent."""
     state = torch.zeros((1, 1), dtype=DEFAULT_DTYPE)
-    
+
     # overwrite who is next to move
     board = board.mirror()
-    
+
     # simulate legal moves and evaluate whether there is a mate threat on the board
     for move in list(board.legal_moves):
         board.push(move)
@@ -465,11 +502,11 @@ def board_to_can_capture_queen(board: chess.Board, skill: Optional[int] = None) 
         if piece.piece_type == chess.QUEEN and piece.color == opponent_color:
             opponent_queen_square = square
             break
-    
+
     # return 0 if there is no queen on the board
     if opponent_queen_square is None:
-        return state  
-    
+        return state
+
     # Check if any legal move captures the opponent's queen
     for move in board.legal_moves:
         if move.to_square == opponent_queen_square and board.is_capture(move):
@@ -550,8 +587,10 @@ def board_to_ambiguous_moves(board: chess.Board, skill: Optional[int] = None) ->
     for (piece_type, to_square), from_squares in piece_moves.items():
         if len(from_squares) > 1:
             # Check if there is more than one unique file or rank among the from_squares
-            if len(set(chess.square_file(sq) for sq in from_squares)) > 1 or \
-               len(set(chess.square_rank(sq) for sq in from_squares)) > 1:
+            if (
+                len(set(chess.square_file(sq) for sq in from_squares)) > 1
+                or len(set(chess.square_rank(sq) for sq in from_squares)) > 1
+            ):
                 state[0][0] = 1
                 return state
 
@@ -661,6 +700,24 @@ has_castling_rights_config = Config(
     max_val=1,
     custom_board_state_function=board_to_has_castling_rights,
     linear_probe_name="has_castling_rights",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_specific_fork_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_specific_fork,
+    linear_probe_name="has_specific_fork",
+    num_rows=1,
+    num_cols=1,
+)
+
+has_any_fork_config = Config(
+    min_val=0,
+    max_val=1,
+    custom_board_state_function=board_to_any_fork,
+    linear_probe_name="has_any_fork",
     num_rows=1,
     num_cols=1,
 )
@@ -814,6 +871,8 @@ all_configs = [
     othello_config,
     othello_mine_yours_config,
     othello_valid_moves_config,
+    has_specific_fork_config,
+    has_any_fork_config,
     has_castling_rights_config,
     has_kingside_castling_rights_config,
     has_queenside_castling_rights_config,
