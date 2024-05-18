@@ -4,6 +4,7 @@ from typing import Callable
 import einops
 import chess
 import os
+from typing import Optional
 
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
@@ -11,18 +12,26 @@ from circuits.utils import to_device, get_nested_folders
 from circuits.eval_sae_as_classifier import normalize_tracker
 
 
-def get_all_results_file_names(folder_name: str) -> list[str]:
+def get_all_results_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
     """Get all file names with results.pkl in the given folder."""
     file_names = []
     for file_name in os.listdir(folder_name):
+        if filter:
+            if filter not in file_name:
+                continue
+
         if "results.pkl" in file_name and "reconstruction" not in file_name:
             file_names.append(file_name)
     return file_names
 
 
-def get_all_evals_file_names(folder_name: str) -> list[str]:
+def get_all_evals_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
     file_names = []
     for file_name in os.listdir(folder_name):
+        if filter:
+            if filter not in file_name:
+                continue
+
         if "evals.pkl" in file_name:
             file_names.append(file_name)
     return file_names
@@ -82,12 +91,12 @@ def get_F1_per_feature(
     true_positives_TFRRC = on_counts_TFRRC
     false_positives_TFRRC = all_ons_TFRRC - true_positives_TFRRC
     false_negatives_TFRRC = total_counts_TFRRC - true_positives_TFRRC
-    true_negatives_TFRRC = all_offs_TFRRC - off_counts_TFRRC
+    # true_negatives_TFRRC =  # TODO
 
     assert torch.all(true_positives_TFRRC >= 0)
     assert torch.all(false_positives_TFRRC >= 0)
     assert torch.all(false_negatives_TFRRC >= 0)
-    assert torch.all(true_negatives_TFRRC >= 0)
+    # assert torch.all(true_negatives_TFRRC >= 0)
 
     precision_TFRRC = true_positives_TFRRC / (
         true_positives_TFRRC + false_positives_TFRRC + epsilon
