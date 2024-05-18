@@ -16,11 +16,13 @@ from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.dictionary_learning import AutoEncoder
 from circuits.chess_utils import encode_string
 from circuits.dictionary_learning import ActivationBuffer
-from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder
+from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
+from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
 from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 
 from IPython import embed
@@ -187,7 +189,7 @@ def get_firing_features(
 
     mask = features_F > threshold
 
-    alive_indices = torch.nonzero(mask, as_tuple=False).squeeze()
+    alive_indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
     max_features = max_features[alive_indices]
 
     return alive_indices, max_features
