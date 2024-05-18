@@ -20,6 +20,91 @@ def get_all_results_file_names(folder_name: str) -> list[str]:
     return file_names
 
 
+def get_all_evals_file_names(folder_name: str) -> list[str]:
+    file_names = []
+    for file_name in os.listdir(folder_name):
+        if "evals.pkl" in file_name:
+            file_names.append(file_name)
+    return file_names
+
+
+def get_all_custom_functions(results: dict) -> list[Callable]:
+    custom_functions = []
+
+    for key in results:
+        if key in chess_utils.config_lookup:
+            custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
+    return custom_functions
+
+
+def get_all_f1s(results: dict, device: str) -> dict:
+    custom_functions = get_all_custom_functions(results)
+
+    results = add_off_tracker(results, custom_functions, device)
+
+    on_counts_TF = results["on_count"]
+    off_counts_TF = results["off_count"]
+
+    f1s = {}
+
+    for custom_function in custom_functions:
+        func_name = custom_function.__name__
+        on_counts_TFRRC = results[func_name]["on"]
+        off_counts_TFRRC = results[func_name]["off"]
+        f1_TFRRC = get_F1_per_feature(
+            on_counts_TFRRC, on_counts_TF, off_counts_TFRRC, off_counts_TF
+        )
+
+        f1s[func_name] = f1_TFRRC
+    return f1s
+
+
+def get_F1_per_feature(
+    on_counts_TFRRC: torch.Tensor,
+    on_counts_TF: torch.Tensor,
+    off_counts_TFRRC: torch.Tensor,
+    off_counts_TF: torch.Tensor,
+):
+    epsilon = 1e-8
+    T, F, R1, R2, C = on_counts_TFRRC.shape
+    total_counts_TFRRC = on_counts_TFRRC + off_counts_TFRRC
+
+    # All RRCs should be equal
+    assert torch.all(total_counts_TFRRC[0, 0] == total_counts_TFRRC[1, 2])
+
+    all_ons_TFRRC = einops.repeat(on_counts_TF, "T F -> T F R1 R2 C", R1=R1, R2=R2, C=C)
+    all_offs_TFRRC = einops.repeat(off_counts_TF, "T F -> T F R1 R2 C", R1=R1, R2=R2, C=C)
+    all_counts_TF = on_counts_TF + off_counts_TF
+
+    # All elements in all_counts_TF should be equal
+    assert torch.all(all_counts_TF == all_counts_TF[0].expand_as(all_counts_TF))
+
+    true_positives_TFRRC = on_counts_TFRRC
+    false_positives_TFRRC = all_ons_TFRRC - true_positives_TFRRC
+    false_negatives_TFRRC = total_counts_TFRRC - true_positives_TFRRC
+    true_negatives_TFRRC = all_offs_TFRRC - off_counts_TFRRC
+
+    assert torch.all(true_positives_TFRRC >= 0)
+    assert torch.all(false_positives_TFRRC >= 0)
+    assert torch.all(false_negatives_TFRRC >= 0)
+    assert torch.all(true_negatives_TFRRC >= 0)
+
+    precision_TFRRC = true_positives_TFRRC / (
+        true_positives_TFRRC + false_positives_TFRRC + epsilon
+    )
+    recall_TFRRC = true_positives_TFRRC / (true_positives_TFRRC + false_negatives_TFRRC + epsilon)
+    f1_TFRRC = 2 * (precision_TFRRC * recall_TFRRC) / (precision_TFRRC + recall_TFRRC + epsilon)
+
+    assert torch.all(precision_TFRRC >= 0)
+    assert torch.all(precision_TFRRC <= 1)
+    assert torch.all(recall_TFRRC >= 0)
+    assert torch.all(recall_TFRRC <= 1)
+    assert torch.all(f1_TFRRC >= 0)
+    assert torch.all(f1_TFRRC <= 1)
+
+    return f1_TFRRC
+
+
 def get_above_below_counts(
     on_tracker_TFRRC: torch.Tensor,
     on_counts_TFRRC: torch.Tensor,
@@ -409,11 +494,8 @@ def analyze_results_dict(
     save_results: bool = True,
     mask: bool = False,
 ) -> tuple[dict, dict]:
-    custom_functions = []
 
-    for key in results:
-        if key in chess_utils.config_lookup:
-            custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
+    custom_functions = get_all_custom_functions(results)
 
     results = add_off_tracker(results, custom_functions, device)
 
