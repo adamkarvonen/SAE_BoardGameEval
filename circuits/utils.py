@@ -17,9 +17,11 @@ from circuits.dictionary_learning import AutoEncoder
 from circuits.chess_utils import encode_string
 from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
+from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
 from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
@@ -43,6 +45,14 @@ def get_model(model_name: str, device: torch.device) -> NNsight:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         tf_model = HookedTransformer.from_pretrained("Baidicoot/Othello-GPT-Transformer-Lens")
         model = NNsight(tf_model).to(device)
+        return model
+
+    if (
+        model_name == "adamkarvonen/RandomWeights8LayerOthelloGPT2"
+        or model_name == "adamkarvonen/RandomWeights8LayerChessGPT2"
+    ):
+        model = GPT2LMHeadModel.from_pretrained(model_name).to(device)
+        model = NNsight(model).to(device)
         return model
 
     if model_name == "adamkarvonen/8LayerChessGPT2":
@@ -88,15 +98,16 @@ def get_ae_bundle(
     for k, v in config["trainer"].items():
         if k not in ["trainer_class", "sparsity_penalty"]:
             if isinstance(v, str) and k != "dict_class":
-                config_args.append(k + "=" + "\'" + v + "\'")
+                config_args.append(k + "=" + "'" + v + "'")
             else:
                 config_args.append(k + "=" + str(v))
     config_str = ", ".join(config_args)
     ae = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__.from_pretrained(
-        autoencoder_model_path, device=device)
+        autoencoder_model_path, device=device
+    )
 
     context_length = config["buffer"]["ctx_len"]
-    #layer = config["trainer"]["layer"]
+    # layer = config["trainer"]["layer"]
     layer = 5
     print(f"WARNING: using manual setting of layer to {layer}")
 
@@ -189,7 +200,7 @@ def get_firing_features(
 
     mask = features_F > threshold
 
-    alive_indices = torch.nonzero(mask, as_tuple=False).squeeze()
+    alive_indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
     max_features = max_features[alive_indices]
 
     return alive_indices, max_features
