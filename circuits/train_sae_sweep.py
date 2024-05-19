@@ -33,6 +33,7 @@ from IPython import embed
 DEVICE = 'cuda:0'
 
 layer = 5
+random_weights = False
 othello = True
 
 if not othello:
@@ -40,7 +41,10 @@ if not othello:
         meta = pickle.load(f)
 
     context_length = 256
-    model_name = "adamkarvonen/8LayerChessGPT2"
+    if random_weights:
+        model_name = "adamkarvonen/RandomWeights8LayerChessGPT2"
+    else: 
+        model_name = "adamkarvonen/8LayerChessGPT2"
     dataset_name = "adamkarvonen/chess_sae_text"
     data = chess_hf_dataset_to_generator(
         dataset_name, meta, context_length=context_length, split="train", streaming=True
@@ -48,7 +52,10 @@ if not othello:
     model_type = "chess"
 else:
     context_length = 59
-    model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+    if random_weights:
+        model_name = "adamkarvonen/RandomWeights8LayerOthelloGPT2"
+    else:
+        model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
     dataset_name = "taufeeque/othellogpt"
     data = othello_hf_dataset_to_generator(
         dataset_name, context_length=context_length, split="train", streaming=True
@@ -101,7 +108,7 @@ trainer_configs = []
 
 # grid search sweep
 # old: learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
-expansion_factor_ = 2**t.arange(3, 5)
+expansion_factor_ = 2**t.arange(4, 5)
 sparsity_queue_length_ = [10]
 anneal_start_ = t.logspace(start=3.7, end=4.2, steps=3)
 n_sparsity_updates_ = [10]
@@ -122,7 +129,7 @@ n_sparsity_updates_ = [10]
 #        'l1_penalty' : sp.item(),
 #        'lambda_warm_steps' : warmup_steps,
 #        'seed' : seed,
-#        'wandb_name' : f'StandardTrainerNew-Anthropic-othello-{i}',
+#        'wandb_name' : f'StandardTrainerNew-Anthropic-{"othello" if othello else "chess"}-{i}',
 #    })
    
 
@@ -156,7 +163,7 @@ n_sparsity_updates_ = [10]
 #        'lambda_warm_steps' : warmup_steps,
 #        'steps' : steps,
 #        'seed' : seed,
-#        'wandb_name' : f'PAnnealTrainerNew-Anthropic-othello-{i}',
+#        'wandb_name' : f'PAnnealTrainerNew-Anthropic-{"othello" if othello else "chess"}-{i}',
 #    })
 
 
@@ -215,65 +222,68 @@ n_sparsity_updates_ = [10]
 #    })
 
 
-learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
-initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5)
-param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
-
-for i, param_setting in enumerate(param_combinations):
-
-    lr, expansion_factor, sp = param_setting
-    trainer_configs.append({
-        'trainer' : GatedSAETrainer,
-        'dict_class' : GatedAutoEncoder,
-        'activation_dim' : activation_dim,
-        'dict_size' : expansion_factor.item()*activation_dim,
-        'lr' : lr.item(),
-        'l1_penalty' : sp.item(),
-        'warmup_steps' : warmup_steps,
-        'resample_steps' : resample_steps,
-        'seed' : seed,
-        'wandb_name' : f'GatedSAETrainer-othello-{i}',
-    })
-
-
 #learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
-#initial_sparsity_penalty_ = t.logspace(-1.3, -1.0, 5)
-#param_combinations = itertools.product(
-#    learning_rate_,
-#    expansion_factor_,
-#    sparsity_queue_length_,
-#    anneal_start_,
-#    n_sparsity_updates_,
-#    initial_sparsity_penalty_)
+#initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5)
+#param_combinations = itertools.product(learning_rate_, expansion_factor_, initial_sparsity_penalty_)
 #
 #for i, param_setting in enumerate(param_combinations):
-#    lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = param_setting
 #
+#    lr, expansion_factor, sp = param_setting
 #    trainer_configs.append({
-#        'trainer' : GatedAnnealTrainer,
+#        'trainer' : GatedSAETrainer,
 #        'dict_class' : GatedAutoEncoder,
 #        'activation_dim' : activation_dim,
 #        'dict_size' : expansion_factor.item()*activation_dim,
 #        'lr' : lr.item(),
-#        'sparsity_function' : 'Lp^p',
-#        'initial_sparsity_penalty' : sp.item(),
-#        'p_start' : p_start,
-#        'p_end' : p_end,
-#        'anneal_start' : int(anneal_start.item()),
-#        'anneal_end' : anneal_end,
-#        'sparsity_queue_length' : sparsity_queue_length,
-#        'n_sparsity_updates' : n_sparsity_updates,
+#        'l1_penalty' : sp.item(),
 #        'warmup_steps' : warmup_steps,
 #        'resample_steps' : resample_steps,
-#        'steps' : steps,
 #        'seed' : seed,
-#        'wandb_name' : f'GatedAnnealTrainer-othello-{i}',
+#        'wandb_name' : f'GatedSAETrainer-{"othello" if othello else "chess"}-{i}',
 #    })
+
+
+learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
+initial_sparsity_penalty_ = t.logspace(-1.3, -1.0, 5)
+param_combinations = itertools.product(
+    learning_rate_,
+    expansion_factor_,
+    sparsity_queue_length_,
+    anneal_start_,
+    n_sparsity_updates_,
+    initial_sparsity_penalty_)
+
+for i, param_setting in enumerate(param_combinations):
+    lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = param_setting
+
+    trainer_configs.append({
+        'trainer' : GatedAnnealTrainer,
+        'dict_class' : GatedAutoEncoder,
+        'activation_dim' : activation_dim,
+        'dict_size' : expansion_factor.item()*activation_dim,
+        'lr' : lr.item(),
+        'sparsity_function' : 'Lp^p',
+        'initial_sparsity_penalty' : sp.item(),
+        'p_start' : p_start,
+        'p_end' : p_end,
+        'anneal_start' : int(anneal_start.item()),
+        'anneal_end' : anneal_end,
+        'sparsity_queue_length' : sparsity_queue_length,
+        'n_sparsity_updates' : n_sparsity_updates,
+        'warmup_steps' : warmup_steps,
+        'resample_steps' : resample_steps,
+        'steps' : steps,
+        'seed' : seed,
+        'wandb_name' : f'GatedAnnealTrainer-{"othello" if othello else "chess"}-{i}',
+    })
 
 
 print(f"len trainer configs: {len(trainer_configs)}")
 
-save_dir = 'circuits/dictionary_learning/dictionaries/group-2024-05-17_othello-gated/'
+save_dir = f'circuits/dictionary_learning/dictionaries/group-2024-05-18_{"othello" if othello else "chess"}-{"random_model" if random_weights else "trained_model"}-layer_{layer}-gated_anneal/'
+
+print("save_dir: ", save_dir)
+
 #%%
 trainSAE(
     data = activation_buffer, 
