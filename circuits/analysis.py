@@ -11,6 +11,8 @@ import circuits.othello_utils as othello_utils
 from circuits.utils import to_device, get_nested_folders
 from circuits.eval_sae_as_classifier import normalize_tracker
 
+from IPython import embed
+
 
 def get_all_results_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
     """Get all file names with results.pkl in the given folder."""
@@ -414,22 +416,22 @@ def analyze_board_tracker(
         verbose=verbose,
     )
 
-    if print_results:
-        print("\nTime coverage for high precision:")
-    get_timestep_counts(
-        above_counts_TFRRC,
-        piece_state_on_TFRRC,
-        piece_state_off_counting_TFRRC,
-        print_results=print_results,
-    )
-    if print_results:
-        print("\nTime coverage for high precision and recall:")
-    get_timestep_counts(
-        classifier_counts_TFRRC,
-        piece_state_on_TFRRC,
-        piece_state_off_counting_TFRRC,
-        print_results=print_results,
-    )
+    #if print_results:
+    #    print("\nTime coverage for high precision:")
+    #get_timestep_counts(
+    #    above_counts_TFRRC,
+    #    piece_state_on_TFRRC,
+    #    piece_state_off_counting_TFRRC,
+    #    print_results=print_results,
+    #)
+    #if print_results:
+    #    print("\nTime coverage for high precision and recall:")
+    #get_timestep_counts(
+    #    classifier_counts_TFRRC,
+    #    piece_state_on_TFRRC,
+    #    piece_state_off_counting_TFRRC,
+    #    print_results=print_results,
+    #)
 
     summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
         above_counts_T, above_counts_binary_TFRRC, original_shape
@@ -618,7 +620,11 @@ def analyze_sae_group(
         folder_names = get_nested_folders(group_folder_name)
 
         for autoencoder_path in folder_names:
-            file_names = get_all_results_file_names(autoencoder_path)
+            file_names = get_all_results_file_names(autoencoder_path, "feature_labels")
+
+            embed()
+            exit()
+
             for file_name in file_names:
                 if print_results:
                     print()
@@ -667,8 +673,9 @@ def analyze_sae_group(
 
 
 if __name__ == "__main__":
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
-    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+    #autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
+    #autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
+    #autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+    autoencoder_group_paths = ["autoencoders/group-2024-05-18_chess/group-2024-05-18_chess-trained_model-layer_0/group-2024-05-18_chess-trained_model-layer_0-gated_anneal/"]
 
     analyze_sae_group(autoencoder_group_paths)
