@@ -36,7 +36,7 @@ def get_evals(
             max_len=ae_bundle.context_length,
             io="out",
             device=device,
-            tracer_kwargs={}
+            tracer_args={},
         )
     else:
         eval_results = evaluate(
