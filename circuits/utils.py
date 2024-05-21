@@ -259,7 +259,8 @@ def get_model_activations(
             cur_activations = ae_bundle.submodule.output.save()
             if type(cur_activations.shape) == tuple:
                 cur_activations = cur_activations[0]
-        batch_results.append(cur_activations.value())
+        batch_results.append(cur_activations.value)
+    cur_activations = torch.concat(batch_results)
     return cur_activations
 
 
