@@ -387,8 +387,12 @@ def analyze_board_tracker(
 
     if mask and othello:
         # Optionally, we also mask off the blank class
-        piece_state_on_TFRRC[:, :, :, :, 1] = 0
-        piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
+        if (
+            function == othello_utils.games_batch_to_state_stack_mine_yours_BLRRC
+            or function == othello_utils.games_batch_to_state_stack_BLRRC
+        ):
+            piece_state_on_TFRRC[:, :, :, :, 1] = 0
+            piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
 
     if mask and not othello:
         piece_state_on_TFRRC = mask_initial_board_state(
@@ -416,22 +420,22 @@ def analyze_board_tracker(
         verbose=verbose,
     )
 
-    #if print_results:
+    # if print_results:
     #    print("\nTime coverage for high precision:")
-    #get_timestep_counts(
+    # get_timestep_counts(
     #    above_counts_TFRRC,
     #    piece_state_on_TFRRC,
     #    piece_state_off_counting_TFRRC,
     #    print_results=print_results,
-    #)
-    #if print_results:
+    # )
+    # if print_results:
     #    print("\nTime coverage for high precision and recall:")
-    #get_timestep_counts(
+    # get_timestep_counts(
     #    classifier_counts_TFRRC,
     #    piece_state_on_TFRRC,
     #    piece_state_off_counting_TFRRC,
     #    print_results=print_results,
-    #)
+    # )
 
     summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
         above_counts_T, above_counts_binary_TFRRC, original_shape
@@ -673,9 +677,11 @@ def analyze_sae_group(
 
 
 if __name__ == "__main__":
-    #autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
-    #autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
-    #autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
-    autoencoder_group_paths = ["autoencoders/group-2024-05-18_chess/group-2024-05-18_chess-trained_model-layer_0/group-2024-05-18_chess-trained_model-layer_0-gated_anneal/"]
+    # autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
+    # autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
+    # autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
+    autoencoder_group_paths = [
+        "autoencoders/group-2024-05-18_chess/group-2024-05-18_chess-trained_model-layer_0/group-2024-05-18_chess-trained_model-layer_0-gated_anneal/"
+    ]
 
     analyze_sae_group(autoencoder_group_paths)
