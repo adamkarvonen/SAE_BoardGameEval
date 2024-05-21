@@ -451,7 +451,7 @@ def aggregate_statistics(
 
     if precomputed:
         encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
-        model_activations_ALD = get_model_activations(ae_bundle, encoded_inputs_AL)
+        model_activations_ALD = get_model_activations(ae_bundle, encoded_inputs_AL, batch_size)
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
 

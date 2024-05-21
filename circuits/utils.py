@@ -108,14 +108,14 @@ def get_ae_bundle(
 
     context_length = config["buffer"]["ctx_len"]
 
-    if "layer_0" in autoencoder_model_path:
-        layer = 0
-    elif "layer_5" in autoencoder_model_path:
-        layer = 5
-    else:
-        #layer = 5 
-        #print(f"WARNING: using manual setting of layer to {layer}")
-        raise ValueError("layer not specified in autoencoder_model_path")
+    layer = 5 
+    print(f"WARNING: using manual setting of layer to {layer}")
+    #if "layer_0" in autoencoder_model_path:
+    #    layer = 0
+    #elif "layer_5" in autoencoder_model_path:
+    #    layer = 5
+    #else:
+    #    raise ValueError("layer not specified in autoencoder_model_path")
 
     print("Evaluating on layer: ", layer)
 
@@ -244,14 +244,22 @@ def collect_activations_batch(
 @torch.no_grad()
 def get_model_activations(
     ae_bundle: AutoEncoderBundle,
-    inputs_BL: torch.Tensor,
+    inputs_AL: torch.Tensor,
+    batch_size: int,
 ) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
-    with ae_bundle.model.trace(
-        inputs_BL, invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
-    ):
-        cur_activations = ae_bundle.submodule.output
-        if type(cur_activations.shape) == tuple:
-            cur_activations = cur_activations[0].save()
+    batch_results = []
+    for i in range(inputs_AL.shape[0] // batch_size + 1):
+        start = i * batch_size
+        end = min((i+1) * batch_size, inputs_AL.shape[0])
+        if start == end:
+            break
+        with ae_bundle.model.trace(
+            inputs_AL[start:end], invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
+        ):
+            cur_activations = ae_bundle.submodule.output.save()
+            if type(cur_activations.shape) == tuple:
+                cur_activations = cur_activations[0]
+        batch_results.append(cur_activations.value())
     return cur_activations
 
 
