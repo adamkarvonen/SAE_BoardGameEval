@@ -282,6 +282,12 @@ def mask_initial_board_state(
     if custom_function == chess_utils.board_to_piece_color_state:
         on_tracker_TFRRC[:, :, :, :, 1] = 0
 
+    if (
+        custom_function == othello_utils.games_batch_to_state_stack_mine_yours_BLRRC
+        or custom_function == othello_utils.games_batch_to_state_stack_BLRRC
+    ):
+        on_tracker_TFRRC[:, :, :, :, 1] = 0
+
     return on_tracker_TFRRC
 
 
@@ -385,16 +391,7 @@ def analyze_board_tracker(
 
     piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
 
-    if mask and othello:
-        # Optionally, we also mask off the blank class
-        if (
-            function == othello_utils.games_batch_to_state_stack_mine_yours_BLRRC
-            or function == othello_utils.games_batch_to_state_stack_BLRRC
-        ):
-            piece_state_on_TFRRC[:, :, :, :, 1] = 0
-            piece_state_off_counting_TFRRC[:, :, :, :, 1] = 0
-
-    if mask and not othello:
+    if mask:
         piece_state_on_TFRRC = mask_initial_board_state(
             piece_state_on_TFRRC, function, device, mine_state
         )
