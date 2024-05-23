@@ -451,10 +451,6 @@ def aggregate_statistics(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
-    if precomputed:
-        encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
-        model_activations_ALD = get_model_activations(ae_bundle, encoded_inputs_AL, batch_size)
-
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
 
     torch.manual_seed(0)  # For reproducibility
@@ -502,16 +498,10 @@ def aggregate_statistics(
             othello=othello,
         )
 
-        if precomputed:
-            model_activations_BLD = model_activations_ALD[start:end]
-            all_activations_FBL = get_feature_activations_batch(
-                ae_bundle, model_activations_BLD, alive_features_F
-            )
-        else:
-            encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
-            all_activations_FBL, tokens = collect_activations_batch(
-                ae_bundle, encoded_inputs_BL, alive_features_F
-            )
+        encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
+        all_activations_FBL, tokens = collect_activations_batch(
+            ae_bundle, encoded_inputs_BL, alive_features_F
+        )
 
         if indexing_function is not None:
             custom_indices_BI = custom_indices_AI[start:end]
