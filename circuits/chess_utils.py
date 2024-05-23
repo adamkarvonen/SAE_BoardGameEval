@@ -128,10 +128,7 @@ def board_to_piece_state(board: chess.Board, skill: Optional[int] = None) -> tor
 def board_to_piece_masked_blank_state(
     board: chess.Board, skill: Optional[int] = None
 ) -> torch.Tensor:
-    """Given a chess board object, return an 8x8 torch.Tensor.
-    The 8x8 array should tell what piece is on each square. A white pawn could be 1, a black pawn could be -1, etc.
-    Blank squares should be 0.
-    In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
+    """NOTE: Mask idx is set in the config."""
 
     # Because state is initialized to all 0s, we only need to change the values of the pieces
     state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
@@ -143,33 +140,6 @@ def board_to_piece_masked_blank_state(
             if piece.color == chess.BLACK:
                 piece_value *= -1
             state[i // 8, i % 8] = piece_value
-
-    return state
-
-
-def board_to_piece_masked_initial_state(
-    board: chess.Board, skill: Optional[int] = None
-) -> torch.Tensor:
-    """Given a chess board object, return an 8x8 torch.Tensor.
-    The 8x8 array should tell what piece is on each square. A white pawn could be 1, a black pawn could be -1, etc.
-    Blank squares should be 0.
-    In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
-
-    # Because state is initialized to all 0s, we only need to change the values of the pieces
-    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
-    for i in range(64):
-        piece = board.piece_at(i)
-        if piece:
-            piece_value = PIECE_TO_INT[piece.piece_type]
-            # Multiply by -1 if the piece is black
-            if piece.color == chess.BLACK:
-                piece_value *= -1
-            state[i // 8, i % 8] = piece_value
-
-    INITIAL_BOARD = chess.Board()
-    INITIAL_BOARD_STATE = board_to_piece_state(INITIAL_BOARD)
-    mask = state == INITIAL_BOARD_STATE
-    state[mask] = 0
 
     return state
 
@@ -177,10 +147,7 @@ def board_to_piece_masked_initial_state(
 def board_to_piece_masked_blank_and_initial_state(
     board: chess.Board, skill: Optional[int] = None
 ) -> torch.Tensor:
-    """Given a chess board object, return an 8x8 torch.Tensor.
-    The 8x8 array should tell what piece is on each square. A white pawn could be 1, a black pawn could be -1, etc.
-    Blank squares should be 0.
-    In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
+    """NOTE: Mask idx is set in the config."""
 
     # Because state is initialized to all 0s, we only need to change the values of the pieces
     state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
@@ -697,12 +664,6 @@ piece_blank_masked_config = Config(
     one_hot_mask_idx=6,
 )
 
-piece_initial_masked_config = Config(
-    min_val=-6,
-    max_val=6,
-    custom_board_state_function=board_to_piece_masked_initial_state,
-)
-
 piece_blank_initial_masked_config = Config(
     min_val=-6,
     max_val=6,
@@ -966,7 +927,6 @@ ambiguous_moves_config = Config(
 all_configs = [
     piece_config,
     piece_blank_masked_config,
-    piece_initial_masked_config,
     piece_blank_initial_masked_config,
     color_config,
     threat_config,

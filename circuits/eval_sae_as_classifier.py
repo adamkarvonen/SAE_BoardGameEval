@@ -638,7 +638,6 @@ def get_all_chess_functions(othello: bool) -> list[Callable]:
     custom_functions = [
         chess_utils.board_to_piece_state,
         chess_utils.board_to_piece_masked_blank_state,
-        chess_utils.board_to_piece_masked_initial_state,
         chess_utils.board_to_piece_masked_blank_and_initial_state,
         chess_utils.board_to_piece_color_state,
         chess_utils.board_to_pin_state,
