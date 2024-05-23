@@ -97,8 +97,8 @@ def get_sae_group_evals(
             print("Evaluating autoencoder:", autoencoder_path)
             get_evals(
                 autoencoder_path,
-                batch_size=batch_size,
                 eval_inputs,
+                batch_size,
                 device,
                 model_path,
                 model_name,
