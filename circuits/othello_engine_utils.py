@@ -470,7 +470,7 @@ alpha = "ABCDEFGH"
 
 
 def to_board_label(i):
-    return f"{alpha[i//8]}{i%8}"
+    return f"{alpha[i%8]}{i//8}"
 
 
 board_labels = list(map(to_board_label, stoi_indices))
