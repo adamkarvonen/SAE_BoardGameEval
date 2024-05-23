@@ -13,6 +13,7 @@ from circuits.dictionary_learning.evaluation import evaluate
 def get_evals(
     autoencoder_path: str,
     n_inputs: int,
+    batch_size: int,
     device: torch.device,
     model_path: str,
     model_name: str,
@@ -23,10 +24,8 @@ def get_evals(
 
     torch.set_grad_enabled(False)
 
-    dataset_size = n_inputs * 2  # x2 to make sure we have enough data for loss_recovered()
-
     data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_firing_rate_data(
-        autoencoder_path, n_inputs, model_path, model_name, data, device, dataset_size, othello
+        autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
     if othello:
@@ -34,6 +33,7 @@ def get_evals(
             ae_bundle.ae,
             ae_bundle.buffer,
             max_len=ae_bundle.context_length,
+            batch_size=batch_size,
             io="out",
             device=device,
             tracer_args={},
@@ -43,6 +43,7 @@ def get_evals(
             ae_bundle.ae,
             ae_bundle.buffer,
             max_len=ae_bundle.context_length,
+            batch_size=batch_size,
             io="out",
             device=device,
         )
@@ -70,6 +71,7 @@ def get_sae_group_evals(
     autoencoder_group_paths: list[str],
     device: str = "cuda",
     eval_inputs: int = 1000,
+    batch_size: int = 10,
 ):
     model_path = "unused"
 
@@ -95,6 +97,7 @@ def get_sae_group_evals(
             print("Evaluating autoencoder:", autoencoder_path)
             get_evals(
                 autoencoder_path,
+                batch_size=batch_size,
                 eval_inputs,
                 device,
                 model_path,
