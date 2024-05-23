@@ -295,6 +295,6 @@ def complete_analysis_pipeline(
     df = update_dataframe_with_results(
         df, all_sae_results, custom_function_names, autoencoder_group_paths, thresholds
     )
-    output_path = csv_results_path.replace(".csv", "_f1_results.csv")
+    output_path = csv_results_path.replace("results.csv", "f1_results.csv")
     df.to_csv(output_path, index=False)
     return output_path
