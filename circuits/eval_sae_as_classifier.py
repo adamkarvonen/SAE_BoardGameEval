@@ -502,13 +502,14 @@ def aggregate_statistics(
 
         if precomputed:
             model_activations_BLD = model_activations_ALD[start:end]
+            all_activations_FBL = get_feature_activations_batch(
+                ae_bundle, model_activations_BLD, alive_features_F
+            )
         else:
             encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
-            model_activations_BLD = get_model_activations(ae_bundle, encoded_inputs_BL)
-
-        all_activations_FBL = get_feature_activations_batch(
-            ae_bundle, model_activations_BLD, alive_features_F
-        )
+            all_activations_FBL, tokens = collect_activations_batch(
+                ae_bundle, encoded_inputs_BL, alive_features_F
+            )
 
         if indexing_function is not None:
             custom_indices_BI = custom_indices_AI[start:end]
