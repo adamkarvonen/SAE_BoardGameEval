@@ -37,16 +37,16 @@ from IPython import embed
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("game", type=str, choices=["chess", "othello"],
+    parser.add_argument("--game", type=str, choices=["chess", "othello"],
                         required=True, help="data and model and context length to run on")
-    parser.add_argument("layer", type=int, required=True,
+    parser.add_argument("--layer", type=int, required=True,
                         help="which residual stream layer to gather activations from")
-    parser.add_argument("trainer_type", type=str, choices=["standard", "p_anneal", "gated", "gated_anneal"],
+    parser.add_argument("--trainer_type", type=str, choices=["standard", "p_anneal", "gated", "gated_anneal"],
                         required=True, help="run sweep on this trainer")
-    parser.add_argument("save_dir_basename", type=str, required=True,
+    parser.add_argument("--save_dir", type=str, required=True,
                         help="where to store sweep")
-    parser.add_argument("random_model", action="store_true",  help="use random weight LM")
-    parser.add_argument("dry_run", action="store_true",  help="dry run sweep")
+    parser.add_argument("--random_model", action="store_true",  help="use random weight LM")
+    parser.add_argument("--dry_run", action="store_true",  help="dry run sweep")
     args = parser.parse_args()
     return args
 
@@ -55,13 +55,12 @@ def run_sae_batch(
         othello : bool,
         layer : int,
         trainer_type : str,
-        save_dir_basename : str,
+        save_dir : str,
         device : str,
         random_model : bool = False,
         dry_run : bool = False
 ):
     assert not random_model
-    game_name = "othello" if othello else "chess"
 
     if not othello:
         with open("models/meta.pkl", "rb") as f:
@@ -89,7 +88,7 @@ def run_sae_batch(
     activation_dim = 512  # output dimension of the layer
 
     buffer_size = int(1e4 / 1)
-    llm_batch_size = 256
+    llm_batch_size = 64 # 256 for A100 GPU
     sae_batch_size = 8192
 
     num_tokens = 300_000_000
@@ -98,7 +97,7 @@ def run_sae_batch(
         data,
         model,
         submodule,
-        n_ctxs=8e3,
+        n_ctxs=1e3,
         ctx_len=context_length,
         refresh_batch_size=llm_batch_size,
         out_batch_size=sae_batch_size,
@@ -130,7 +129,8 @@ def run_sae_batch(
     anneal_start_ = [10000]
     n_sparsity_updates_ = [10]
     if trainer_type == "p_anneal":
-        initial_sparsity_penalty_ = t.linspace(0.2, 0.8, 20).tolist()
+        #initial_sparsity_penalty_ = t.linspace(0.02, 0.08, 20).tolist()    # chess
+        initial_sparsity_penalty_ = t.linspace(0.025, 0.05, 20).tolist()    # othello
         param_combinations = itertools.product(
             learning_rate_,
             expansion_factor_,
@@ -173,11 +173,14 @@ def run_sae_batch(
                     "steps": steps,
                     "seed": seed,
                     "wandb_name": f"PAnnealTrainer-{model_type}-{i}",
+                    "layer" : layer,
+                    "lm_name" : model_name,
                     "device": device,
                 }
             )
     elif trainer_type == "standard":
-        initial_sparsity_penalty_ = t.logspace(-1.7, -1.2, 5).tolist()
+        #initial_sparsity_penalty_ = t.linspace(0.03, 0.1, 20).tolist()    # chess
+        initial_sparsity_penalty_ = t.linspace(0.035, 0.9, 20).tolist()    # othello
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
@@ -200,12 +203,15 @@ def run_sae_batch(
                     "warmup_steps": warmup_steps,
                     "resample_steps": resample_steps,
                     "seed": seed,
+                    "layer" : layer,
+                    "lm_name" : model_name,
                     "wandb_name": f"StandardTrainer-{model_type}-{i}",
                     "device": device,
                 }
             )
     elif trainer_type == "gated":
-        initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5).tolist()
+        #initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()   # chess
+        initial_sparsity_penalty_ = t.linspace(0.2, 1.0, 20).tolist()   # othello
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
@@ -228,12 +234,15 @@ def run_sae_batch(
                     "warmup_steps": warmup_steps,
                     "resample_steps": resample_steps,
                     "seed": seed,
+                    "layer" : layer,
+                    "lm_name" : model_name,
                     "wandb_name": f"GatedSAETrainer-{model_type}-{i}",
                     "device": device,
                 }
             )
     elif trainer_type == "gated_anneal":
-        initial_sparsity_penalty_ = t.logspace(-1.3, -1.0, 5).tolist()
+        #initial_sparsity_penalty_ = t.linspace(0.05, 0.15, 20).tolist()   # chess
+        initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()    # othello
         param_combinations = itertools.product(
             learning_rate_,
             expansion_factor_,
@@ -275,6 +284,8 @@ def run_sae_batch(
                     "resample_steps": resample_steps,
                     "steps": steps,
                     "seed": seed,
+                    "layer" : layer,
+                    "lm_name" : model_name,
                     "wandb_name": f"GatedAnnealTrainer-{model_type}-{i}",
                     "device": device,
                 }
@@ -283,11 +294,6 @@ def run_sae_batch(
         raise ValueError("Unknown trainer type: ", trainer_type)
 
     print(f"len trainer configs: {len(trainer_configs)}")
-
-
-    # TODO: add layer, model to some config
-
-    save_dir = save_dir_basename + f"/{model_type}-{trainer_type}/"
 
     if not dry_run:
         # actually run the sweep
@@ -303,12 +309,12 @@ def run_sae_batch(
 if __name__ == "__main__":
     args = get_args()
     run_sae_batch(
-        game == "othello",
+        args.game == "othello",
         args.layer,
         args.trainer_type,
-        args.save_dir_basename,
+        args.save_dir,
         "cuda:0",
-        random_model=args.random_model
+        random_model=args.random_model,
         dry_run=args.dry_run,
     )
 
