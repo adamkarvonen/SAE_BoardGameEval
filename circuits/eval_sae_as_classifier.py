@@ -142,6 +142,7 @@ def construct_othello_dataset(
         return data
 
     for custom_function in custom_functions:
+        print(f"Precomputing {custom_function.__name__}...")
         func_name = custom_function.__name__
         data[func_name] = custom_function(decoded_othello_inputs)
 
