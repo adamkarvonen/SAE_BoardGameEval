@@ -104,6 +104,7 @@ def get_ae_bundle(
     ae = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__.from_pretrained(
         autoencoder_model_path, device=device
     )
+    ae = ae.to(device)
 
     context_length = config["buffer"]["ctx_len"]
 
