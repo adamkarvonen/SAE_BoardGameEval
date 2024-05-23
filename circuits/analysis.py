@@ -260,6 +260,10 @@ def mask_initial_board_state(
     mine_state: bool = False,
 ) -> torch.Tensor:
 
+    raise ValueError(
+        "Masking has been mostly deprecated. In general, I recommend setting mask to False."
+    )
+
     if custom_function == chess_utils.board_to_piece_state:
         T, F, R1, R2, C = on_tracker_TFRRC.shape
         config = chess_utils.config_lookup[custom_function.__name__]
