@@ -207,13 +207,8 @@ def compare_constructed_to_true_boards(
 
         batch_size = true_boards_BLRRC.shape[0]
         num_board_states = true_boards_BLRRC.shape[1]
-        num_rows = true_boards_BLRRC.shape[2]
         num_boards = batch_size * num_board_states
-        num_squares = num_boards * num_rows * num_rows
-
-        if mask:
-            # minor optimization by only doing this if mask is True
-            num_squares = int(true_boards_BLRRC.sum().item())
+        num_squares = int(true_boards_BLRRC.sum().item())
 
         results[custom_function.__name__]["num_boards"] += num_boards
         results[custom_function.__name__]["num_squares"] += num_squares

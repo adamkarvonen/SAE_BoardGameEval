@@ -94,7 +94,9 @@ def construct_chess_dataset(
     if not precompute_dataset:
         return data
 
-    state_stack_dict_BLRR = chess_utils.create_state_stacks(pgn_strings, custom_functions, device)
+    state_stack_dict_BLRR = chess_utils.create_state_stacks(
+        pgn_strings, custom_functions, device, show_progress=True
+    )
 
     for func_name in state_stack_dict_BLRR:
         config = chess_utils.config_lookup[func_name]
@@ -449,10 +451,6 @@ def aggregate_statistics(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 
-    if precomputed:
-        encoded_inputs_AL = torch.tensor(encoded_inputs).to(device)
-        model_activations_ALD = get_model_activations(ae_bundle, encoded_inputs_AL, batch_size)
-
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
 
     torch.manual_seed(0)  # For reproducibility
@@ -500,14 +498,9 @@ def aggregate_statistics(
             othello=othello,
         )
 
-        if precomputed:
-            model_activations_BLD = model_activations_ALD[start:end]
-        else:
-            encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
-            model_activations_BLD = get_model_activations(ae_bundle, encoded_inputs_BL)
-
-        all_activations_FBL = get_feature_activations_batch(
-            ae_bundle, model_activations_BLD, alive_features_F
+        encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
+        all_activations_FBL, tokens = collect_activations_batch(
+            ae_bundle, encoded_inputs_BL, alive_features_F
         )
 
         if indexing_function is not None:
@@ -625,6 +618,7 @@ def get_recommended_custom_functions(othello: bool) -> list[Callable]:
     else:
         custom_functions = [
             othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
+            othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
             othello_utils.games_batch_to_valid_moves_BLRRC,
         ]
     return custom_functions
@@ -635,6 +629,8 @@ def get_all_chess_functions(othello: bool) -> list[Callable]:
         raise ValueError("This is a chess function")
     custom_functions = [
         chess_utils.board_to_piece_state,
+        chess_utils.board_to_piece_masked_blank_state,
+        chess_utils.board_to_piece_masked_blank_and_initial_state,
         chess_utils.board_to_piece_color_state,
         chess_utils.board_to_pin_state,
         chess_utils.board_to_threat_state,
