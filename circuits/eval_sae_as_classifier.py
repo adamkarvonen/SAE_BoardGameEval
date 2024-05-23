@@ -94,7 +94,9 @@ def construct_chess_dataset(
     if not precompute_dataset:
         return data
 
-    state_stack_dict_BLRR = chess_utils.create_state_stacks(pgn_strings, custom_functions, device)
+    state_stack_dict_BLRR = chess_utils.create_state_stacks(
+        pgn_strings, custom_functions, device, show_progress=True
+    )
 
     for func_name in state_stack_dict_BLRR:
         config = chess_utils.config_lookup[func_name]

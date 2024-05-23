@@ -10,6 +10,7 @@ from beartype import beartype
 from torch import Tensor
 from enum import Enum
 import re
+from tqdm import tqdm
 
 import circuits.othello_utils as othello_utils
 
@@ -1090,6 +1091,7 @@ def create_state_stacks(
     custom_board_to_state_fns: list[Callable[[chess.Board], torch.Tensor]],
     device: torch.device,
     skill_array: Optional[torch.Tensor] = None,
+    show_progress: bool = False,
 ) -> dict[str, Float[Tensor, "sample_size pgn_str_length rows cols"]]:
     """Given a list of strings of PGN format moves, create a dict of func name to tensor.
     custom_board_to_state is a function that takes a chess.Board object and returns a 8x8 torch.Tensor for
@@ -1101,7 +1103,8 @@ def create_state_stacks(
         func_name = custom_fn.__name__
         state_stacks[func_name] = []
 
-    for idx, pgn_string in enumerate(moves_strings):
+    loop_iterable = tqdm(moves_strings) if show_progress else moves_strings
+    for idx, pgn_string in enumerate(loop_iterable):
         if skill_array is not None:
             skill = skill_array[idx]
         state_stack_dict = create_state_stack(pgn_string, custom_board_to_state_fns, device, skill)
