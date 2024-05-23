@@ -626,6 +626,7 @@ def get_recommended_custom_functions(othello: bool) -> list[Callable]:
     else:
         custom_functions = [
             othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
+            othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
             othello_utils.games_batch_to_valid_moves_BLRRC,
         ]
     return custom_functions
@@ -636,6 +637,9 @@ def get_all_chess_functions(othello: bool) -> list[Callable]:
         raise ValueError("This is a chess function")
     custom_functions = [
         chess_utils.board_to_piece_state,
+        chess_utils.board_to_piece_masked_blank_state,
+        chess_utils.board_to_piece_masked_initial_state,
+        chess_utils.board_to_piece_masked_blank_and_initial_state,
         chess_utils.board_to_piece_color_state,
         chess_utils.board_to_pin_state,
         chess_utils.board_to_threat_state,

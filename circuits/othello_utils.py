@@ -89,8 +89,31 @@ def games_batch_to_state_stack_mine_yours_BLRRC(batch_str_moves):
     return t.stack(game_stack, axis=0)
 
 
+def games_batch_to_state_stack_mine_yours_blank_mask_BLRRC(batch_str_moves):
+    """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
+    game_stack = []
+    for game in batch_str_moves:
+        if isinstance(game, t.Tensor):
+            game = game.flatten()
+
+        board = OthelloBoardState()
+        states = []
+        for i, move in enumerate(game):
+            flip = 1
+            if i % 2 == 1:
+                flip = -1
+            board.umpire(move)
+            one_hot = board_state_to_RRC(board.state, flip)
+            one_hot[..., 1] = 0
+            states.append(one_hot)
+        states = t.stack(states, axis=0)
+        game_stack.append(states)
+    return t.stack(game_stack, axis=0)
+
+
 othello_functions = [
     games_batch_to_state_stack_BLRRC.__name__,
     games_batch_to_state_stack_mine_yours_BLRRC.__name__,
+    games_batch_to_state_stack_mine_yours_blank_mask_BLRRC.__name__,
     games_batch_to_valid_moves_BLRRC.__name__,
 ]

@@ -125,6 +125,82 @@ def board_to_piece_state(board: chess.Board, skill: Optional[int] = None) -> tor
     return state
 
 
+def board_to_piece_masked_blank_state(
+    board: chess.Board, skill: Optional[int] = None
+) -> torch.Tensor:
+    """Given a chess board object, return an 8x8 torch.Tensor.
+    The 8x8 array should tell what piece is on each square. A white pawn could be 1, a black pawn could be -1, etc.
+    Blank squares should be 0.
+    In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
+
+    # Because state is initialized to all 0s, we only need to change the values of the pieces
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
+    for i in range(64):
+        piece = board.piece_at(i)
+        if piece:
+            piece_value = PIECE_TO_INT[piece.piece_type]
+            # Multiply by -1 if the piece is black
+            if piece.color == chess.BLACK:
+                piece_value *= -1
+            state[i // 8, i % 8] = piece_value
+
+    return state
+
+
+def board_to_piece_masked_initial_state(
+    board: chess.Board, skill: Optional[int] = None
+) -> torch.Tensor:
+    """Given a chess board object, return an 8x8 torch.Tensor.
+    The 8x8 array should tell what piece is on each square. A white pawn could be 1, a black pawn could be -1, etc.
+    Blank squares should be 0.
+    In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
+
+    # Because state is initialized to all 0s, we only need to change the values of the pieces
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
+    for i in range(64):
+        piece = board.piece_at(i)
+        if piece:
+            piece_value = PIECE_TO_INT[piece.piece_type]
+            # Multiply by -1 if the piece is black
+            if piece.color == chess.BLACK:
+                piece_value *= -1
+            state[i // 8, i % 8] = piece_value
+
+    INITIAL_BOARD = chess.Board()
+    INITIAL_BOARD_STATE = board_to_piece_state(INITIAL_BOARD)
+    mask = state == INITIAL_BOARD_STATE
+    state[mask] = 0
+
+    return state
+
+
+def board_to_piece_masked_blank_and_initial_state(
+    board: chess.Board, skill: Optional[int] = None
+) -> torch.Tensor:
+    """Given a chess board object, return an 8x8 torch.Tensor.
+    The 8x8 array should tell what piece is on each square. A white pawn could be 1, a black pawn could be -1, etc.
+    Blank squares should be 0.
+    In the 8x8 array, row 0 is A1-H1 (White), row 1 is A2-H2, etc."""
+
+    # Because state is initialized to all 0s, we only need to change the values of the pieces
+    state = torch.zeros((8, 8), dtype=DEFAULT_DTYPE)
+    for i in range(64):
+        piece = board.piece_at(i)
+        if piece:
+            piece_value = PIECE_TO_INT[piece.piece_type]
+            # Multiply by -1 if the piece is black
+            if piece.color == chess.BLACK:
+                piece_value *= -1
+            state[i // 8, i % 8] = piece_value
+
+    INITIAL_BOARD = chess.Board()
+    INITIAL_BOARD_STATE = board_to_piece_state(INITIAL_BOARD)
+    mask = state == INITIAL_BOARD_STATE
+    state[mask] = 0
+
+    return state
+
+
 def board_to_threat_state(board: chess.Board, skill: Optional[int] = None) -> torch.Tensor:
     """Given a chess board object, return an 8x8 torch.Tensor.
     The 8x8 array should tell if each square is being attacked by the opponent."""
@@ -605,12 +681,33 @@ class Config:
     linear_probe_name: str = ""
     num_rows: int = 8
     num_cols: int = 8
+    one_hot_mask_idx: Optional[int] = None
 
 
 piece_config = Config(
     min_val=-6,
     max_val=6,
     custom_board_state_function=board_to_piece_state,
+)
+
+piece_blank_masked_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_piece_masked_blank_state,
+    one_hot_mask_idx=6,
+)
+
+piece_initial_masked_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_piece_masked_initial_state,
+)
+
+piece_blank_initial_masked_config = Config(
+    min_val=-6,
+    max_val=6,
+    custom_board_state_function=board_to_piece_masked_blank_and_initial_state,
+    one_hot_mask_idx=6,
 )
 
 color_config = Config(
@@ -683,6 +780,14 @@ othello_mine_yours_config = Config(
     min_val=-1,
     max_val=1,
     custom_board_state_function=othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
+    num_rows=8,
+    num_cols=8,
+)
+
+othello_mine_yours_blank_mask_config = Config(
+    min_val=-1,
+    max_val=1,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
     num_rows=8,
     num_cols=8,
 )
@@ -860,6 +965,9 @@ ambiguous_moves_config = Config(
 
 all_configs = [
     piece_config,
+    piece_blank_masked_config,
+    piece_initial_masked_config,
+    piece_blank_initial_masked_config,
     color_config,
     threat_config,
     legal_move_config,
@@ -870,6 +978,7 @@ all_configs = [
     pin_config,
     othello_config,
     othello_mine_yours_config,
+    othello_mine_yours_blank_mask_config,
     othello_valid_moves_config,
     has_specific_fork_config,
     has_any_fork_config,
@@ -1084,6 +1193,9 @@ def state_stack_to_one_hot(
 
     for val in mapping:
         one_hot[..., mapping[val]] = state_stack == val
+
+    if config.one_hot_mask_idx is not None:
+        one_hot[..., config.one_hot_mask_idx] = 0
 
     return one_hot
 
@@ -1345,7 +1457,7 @@ def chess_boards_to_state_stack(
     return stacked_one_hot
 
 
-def mask_initial_board_states(
+def mask_initial_one_hot_board_states(
     one_hot_list: Int[Tensor, "batch_size num_rows num_cols num_options"],
     device: torch.device,
     config: Config,

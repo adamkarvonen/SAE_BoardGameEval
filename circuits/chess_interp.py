@@ -293,7 +293,9 @@ def board_analysis(
 
             # See function definitions for jaxtyped shapes
             one_hot_list = chess_utils.chess_boards_to_state_stack(chess_boards, device, config)
-            one_hot_list = chess_utils.mask_initial_board_states(one_hot_list, device, config)
+            one_hot_list = chess_utils.mask_initial_one_hot_board_states(
+                one_hot_list, device, config
+            )
             averaged_one_hot = chess_utils.get_averaged_states(one_hot_list)
             common_indices = chess_utils.find_common_states(averaged_one_hot, threshold)
 
