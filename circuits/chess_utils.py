@@ -611,30 +611,40 @@ piece_config = Config(
     min_val=-6,
     max_val=6,
     custom_board_state_function=board_to_piece_state,
+    num_rows=8,
+    num_cols=8,
 )
 
 color_config = Config(
     min_val=-1,
     max_val=1,
     custom_board_state_function=board_to_piece_color_state,
+    num_rows=8,
+    num_cols=8,
 )
 
 threat_config = Config(
     min_val=0,
     max_val=1,
     custom_board_state_function=board_to_threat_state,
+    num_rows=8,
+    num_cols=8,
 )
 
 legal_move_config = Config(
     min_val=0,
     max_val=1,
     custom_board_state_function=board_to_legal_moves_state,
+    num_rows=8,
+    num_cols=8,
 )
 
 prev_move_config = Config(
     min_val=-6,
     max_val=6,
     custom_board_state_function=board_to_prev_state,
+    num_rows=8,
+    num_cols=8,
 )
 
 
@@ -763,6 +773,8 @@ pseudo_legal_move_config = Config(
     max_val=1,
     custom_board_state_function=board_to_pseudo_legal_moves_state,
     linear_probe_name="chess_pseudo_legal_move_probe",
+    num_rows=8,
+    num_cols=8,
 )
 
 can_claim_draw_config = Config(
