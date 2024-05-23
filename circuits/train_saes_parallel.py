@@ -1,5 +1,4 @@
-# %%
-# Imports
+import argparse
 import torch as t
 import numpy as np
 import itertools
@@ -14,8 +13,6 @@ from circuits.utils import (
     get_model,
     get_submodule,
 )
-
-# from circuits.nnsight_buffer import NNsightActivationBuffer
 
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
@@ -35,15 +32,37 @@ from dictionary_learning.dictionary import (
 
 from joblib import Parallel, delayed
 
-
-# %%
-N_GPUS = 4
-
-layer = 5
-othello = True
+from IPython import embed
 
 
-def run_sae_batch(trainer_type, device):
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("game", type=str, choices=["chess", "othello"],
+                        required=True, help="data and model and context length to run on")
+    parser.add_argument("layer", type=int, required=True,
+                        help="which residual stream layer to gather activations from")
+    parser.add_argument("trainer_type", type=str, choices=["standard", "p_anneal", "gated", "gated_anneal"],
+                        required=True, help="run sweep on this trainer")
+    parser.add_argument("save_dir_basename", type=str, required=True,
+                        help="where to store sweep")
+    parser.add_argument("random_model", action="store_true",  help="use random weight LM")
+    parser.add_argument("dry_run", action="store_true",  help="dry run sweep")
+    args = parser.parse_args()
+    return args
+
+
+def run_sae_batch(
+        othello : bool,
+        layer : int,
+        trainer_type : str,
+        save_dir_basename : str,
+        device : str,
+        random_model : bool = False,
+        dry_run : bool = False
+):
+    assert not random_model
+    game_name = "othello" if othello else "chess"
+
     if not othello:
         with open("models/meta.pkl", "rb") as f:
             meta = pickle.load(f)
@@ -88,9 +107,6 @@ def run_sae_batch(trainer_type, device):
         device=device,
     )
 
-    # %%
-    # Training
-
     seed = 42
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
     save_steps = int(steps / 4)
@@ -108,15 +124,13 @@ def run_sae_batch(trainer_type, device):
 
     # grid search sweep
 
-    # old: learning_rate_ = t.logspace(start=-5, end=-2, steps=3, base=10)
-    learning_rate_ = t.logspace(start=-3.5, end=-2.5, steps=3, base=10)
-    expansion_factor_ = 2 ** t.arange(3, 5)
+    learning_rate_ = [3e-4]
+    expansion_factor_ = (2 ** t.arange(3, 5)).tolist()
     sparsity_queue_length_ = [10]
-    anneal_start_ = t.logspace(start=3, end=4, steps=2, base=10)
+    anneal_start_ = [10000]
     n_sparsity_updates_ = [10]
-    # old: initial_sparsity_penalty_ = t.logspace(-1.7,-1.2, 5)
     if trainer_type == "p_anneal":
-        initial_sparsity_penalty_ = t.logspace(-2.2, -1.5, 5)
+        initial_sparsity_penalty_ = t.linspace(0.2, 0.8, 20).tolist()
         param_combinations = itertools.product(
             learning_rate_,
             expansion_factor_,
@@ -125,6 +139,14 @@ def run_sae_batch(trainer_type, device):
             n_sparsity_updates_,
             initial_sparsity_penalty_,
         )
+
+        print(f"Sweep parameters for {trainer_type}: ")
+        print("learning_rate: ", [round(x, 4) for x in learning_rate_])
+        print("expansion_factor: ", [round(x, 4) for x in expansion_factor_])
+        print("sparsity_queue_length: ", [round(x, 4) for x in sparsity_queue_length_])
+        print("anneal_start: ", [round(x, 4) for x in anneal_start_])
+        print("n_sparsity_updates: ", [round(x, 4) for x in n_sparsity_updates_])
+        print("initial_sparsity_penalty: ", [round(x, 4) for x in initial_sparsity_penalty_])
 
         for i, param_setting in enumerate(param_combinations):
             lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = (
@@ -136,13 +158,13 @@ def run_sae_batch(trainer_type, device):
                     "trainer": PAnnealTrainer,
                     "dict_class": AutoEncoder,
                     "activation_dim": activation_dim,
-                    "dict_size": expansion_factor.item() * activation_dim,
-                    "lr": lr.item(),
+                    "dict_size": expansion_factor * activation_dim,
+                    "lr": lr,
                     "sparsity_function": "Lp^p",
-                    "initial_sparsity_penalty": sp.item(),
+                    "initial_sparsity_penalty": sp,
                     "p_start": p_start,
                     "p_end": p_end,
-                    "anneal_start": int(anneal_start.item()),
+                    "anneal_start": int(anneal_start),
                     "anneal_end": anneal_end,
                     "sparsity_queue_length": sparsity_queue_length,
                     "n_sparsity_updates": n_sparsity_updates,
@@ -155,10 +177,15 @@ def run_sae_batch(trainer_type, device):
                 }
             )
     elif trainer_type == "standard":
-        initial_sparsity_penalty_ = t.logspace(-1.7, -1.2, 5)
+        initial_sparsity_penalty_ = t.logspace(-1.7, -1.2, 5).tolist()
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
+
+        print(f"Sweep parameters for {trainer_type}: ")
+        print("learning_rate: ", [round(x, 4) for x in learning_rate_])
+        print("expansion_factor: ", [round(x, 4) for x in expansion_factor_])
+        print("initial_sparsity_penalty: ", [round(x, 4) for x in initial_sparsity_penalty_])
 
         for i, param_setting in enumerate(param_combinations):
             lr, expansion_factor, sp = param_setting
@@ -167,9 +194,9 @@ def run_sae_batch(trainer_type, device):
                     "trainer": StandardTrainer,
                     "dict_class": AutoEncoder,
                     "activation_dim": activation_dim,
-                    "dict_size": expansion_factor.item() * activation_dim,
-                    "lr": lr.item(),
-                    "l1_penalty": sp.item(),
+                    "dict_size": expansion_factor * activation_dim,
+                    "lr": lr,
+                    "l1_penalty": sp,
                     "warmup_steps": warmup_steps,
                     "resample_steps": resample_steps,
                     "seed": seed,
@@ -178,22 +205,26 @@ def run_sae_batch(trainer_type, device):
                 }
             )
     elif trainer_type == "gated":
-        initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5)
+        initial_sparsity_penalty_ = t.logspace(-1.2, -0.8, 5).tolist()
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
 
-        for i, param_setting in enumerate(param_combinations):
+        print(f"Sweep parameters for {trainer_type}: ")
+        print("learning_rate: ", [round(x, 4) for x in learning_rate_])
+        print("expansion_factor: ", [round(x, 4) for x in expansion_factor_])
+        print("initial_sparsity_penalty: ", [round(x, 4) for x in initial_sparsity_penalty_])
 
+        for i, param_setting in enumerate(param_combinations):
             lr, expansion_factor, sp = param_setting
             trainer_configs.append(
                 {
                     "trainer": GatedSAETrainer,
                     "dict_class": GatedAutoEncoder,
                     "activation_dim": activation_dim,
-                    "dict_size": expansion_factor.item() * activation_dim,
-                    "lr": lr.item(),
-                    "l1_penalty": sp.item(),
+                    "dict_size": expansion_factor * activation_dim,
+                    "lr": lr,
+                    "l1_penalty": sp,
                     "warmup_steps": warmup_steps,
                     "resample_steps": resample_steps,
                     "seed": seed,
@@ -202,7 +233,7 @@ def run_sae_batch(trainer_type, device):
                 }
             )
     elif trainer_type == "gated_anneal":
-        initial_sparsity_penalty_ = t.logspace(-1.3, -1.0, 5)
+        initial_sparsity_penalty_ = t.logspace(-1.3, -1.0, 5).tolist()
         param_combinations = itertools.product(
             learning_rate_,
             expansion_factor_,
@@ -211,6 +242,14 @@ def run_sae_batch(trainer_type, device):
             n_sparsity_updates_,
             initial_sparsity_penalty_,
         )
+
+        print(f"Sweep parameters for {trainer_type}: ")
+        print("learning_rate: ", [round(x, 4) for x in learning_rate_])
+        print("expansion_factor: ", [round(x, 4) for x in expansion_factor_])
+        print("sparsity_queue_length: ", [round(x, 4) for x in sparsity_queue_length_])
+        print("anneal_start: ", [round(x, 4) for x in anneal_start_])
+        print("n_sparsity_updates: ", [round(x, 4) for x in n_sparsity_updates_])
+        print("initial_sparsity_penalty: ", [round(x, 4) for x in initial_sparsity_penalty_])
 
         for i, param_setting in enumerate(param_combinations):
             lr, expansion_factor, sparsity_queue_length, anneal_start, n_sparsity_updates, sp = (
@@ -222,13 +261,13 @@ def run_sae_batch(trainer_type, device):
                     "trainer": GatedAnnealTrainer,
                     "dict_class": GatedAutoEncoder,
                     "activation_dim": activation_dim,
-                    "dict_size": expansion_factor.item() * activation_dim,
-                    "lr": lr.item(),
+                    "dict_size": expansion_factor * activation_dim,
+                    "lr": lr,
                     "sparsity_function": "Lp^p",
-                    "initial_sparsity_penalty": sp.item(),
+                    "initial_sparsity_penalty": sp,
                     "p_start": p_start,
                     "p_end": p_end,
-                    "anneal_start": int(anneal_start.item()),
+                    "anneal_start": int(anneal_start),
                     "anneal_end": anneal_end,
                     "sparsity_queue_length": sparsity_queue_length,
                     "n_sparsity_updates": n_sparsity_updates,
@@ -245,24 +284,40 @@ def run_sae_batch(trainer_type, device):
 
     print(f"len trainer configs: {len(trainer_configs)}")
 
-    save_dir = f"circuits/dictionary_learning/dictionaries/{model_type}-{trainer_type}/"
 
-    # %%
-    trainSAE(
-        data=activation_buffer,
-        trainer_configs=trainer_configs,
-        steps=steps,
-        save_steps=save_steps,
-        save_dir=save_dir,
-        log_steps=log_steps,
+    # TODO: add layer, model to some config
+
+    save_dir = save_dir_basename + f"/{model_type}-{trainer_type}/"
+
+    if not dry_run:
+        # actually run the sweep
+        trainSAE(
+            data=activation_buffer,
+            trainer_configs=trainer_configs,
+            steps=steps,
+            save_steps=save_steps,
+            save_dir=save_dir,
+            log_steps=log_steps,
+        )
+
+if __name__ == "__main__":
+    args = get_args()
+    run_sae_batch(
+        game == "othello",
+        args.layer,
+        args.trainer_type,
+        args.save_dir_basename,
+        "cuda:0",
+        random_model=args.random_model
+        dry_run=args.dry_run,
     )
-    # %%
 
+#trainer_types = ["standard", "p_anneal", "gated", "gated_anneal"]
+#N_GPUS = 4
 
-trainer_types = ["standard", "p_anneal", "gated", "gated_anneal"]
-cuda_devices = [f"cuda:{i}" for i in range(N_GPUS)]
-
-Parallel(n_jobs=N_GPUS)(
-    delayed(run_sae_batch)(trainer_type, device)
-    for trainer_type, device in zip(trainer_types, cuda_devices)
-)
+#cuda_devices = [f"cuda:{i}" for i in range(N_GPUS)]
+#
+#Parallel(n_jobs=N_GPUS)(
+#    delayed(run_sae_batch)(trainer_type, device)
+#    for trainer_type, device in zip(trainer_types, cuda_devices)
+#)
