@@ -1,6 +1,6 @@
 import torch as t
 from datasets import load_dataset
-from circuits.othello_engine_utils import OthelloBoardState, stoi, itos, to_board_label
+from circuits.othello_engine_utils import OthelloBoardState, stoi, itos, to_board_label, stoi_indices
 
 
 def hf_othello_dataset_to_generator(
