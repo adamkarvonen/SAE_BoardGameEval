@@ -414,6 +414,7 @@ def prep_firing_rate_data(
     ae_bundle = get_ae_bundle(
         autoencoder_path, device, firing_rate_data, batch_size, model_path, model_name, n_ctxs
     )
+    ae_bundle.ae = ae_bundle.ae.to(device)
 
     return data, ae_bundle, pgn_strings, encoded_inputs
 
