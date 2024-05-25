@@ -106,21 +106,15 @@ def get_ae_bundle(
     )
     ae = ae.to(device)
 
-    context_length = config["buffer"]["ctx_len"]
+    _model_name = config["trainer"]["lm_name"]
+    assert model_name == _model_name
 
-    layer = 5 
-    print(f"WARNING: using manual setting of layer to {layer}")
-    #if "layer_0" in autoencoder_model_path:
-    #    layer = 0
-    #elif "layer_5" in autoencoder_model_path:
-    #    layer = 5
-    #else:
-    #    raise ValueError("layer not specified in autoencoder_model_path")
-
-    print("Evaluating on layer: ", layer)
+    layer = config["trainer"]["layer"]
 
     model = get_model(model_name, device)
     submodule = get_submodule(model_name, layer, model)
+
+    context_length = config["buffer"]["ctx_len"]
 
     activation_dim = ae.activation_dim
     dictionary_size = ae.dict_size
