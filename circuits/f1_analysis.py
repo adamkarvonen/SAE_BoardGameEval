@@ -116,6 +116,16 @@ def get_threshold_column_names(func_name: str, threshold: float) -> tuple[str, s
     )
 
 
+def check_df_if_othello(df: pd.DataFrame) -> bool:
+    for column in df.columns:
+        if "games_batch_to_state_stack" in column:
+            return True
+        if "board_to_piece_" in column:
+            return False
+
+    raise ValueError("Could not determine if this is an Othello dataframe")
+
+
 def get_all_sae_f1_results(
     autoencoder_group_paths: list[str],
     df: pd.DataFrame,
