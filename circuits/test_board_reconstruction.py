@@ -439,8 +439,10 @@ def test_board_reconstructions(
         print_out_results(results, custom_functions)
 
     if save_results:
+        results = to_device(results, "cpu")
         with open(output_file, "wb") as f:
             pickle.dump(results, f)
+        results = to_device(results, device)
     return results
 
 

@@ -27,6 +27,19 @@ def get_all_results_file_names(folder_name: str, filter: Optional[str]) -> list[
     return file_names
 
 
+def get_all_feature_labels_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
+    """Get all file names with results.pkl in the given folder."""
+    file_names = []
+    for file_name in os.listdir(folder_name):
+        if filter:
+            if filter not in file_name:
+                continue
+
+        if "feature_labels.pkl" in file_name:
+            file_names.append(file_name)
+    return file_names
+
+
 def get_all_evals_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
     file_names = []
     for file_name in os.listdir(folder_name):
@@ -602,8 +615,10 @@ def analyze_results_dict(
             misc_stats[func_name]["high_precision_and_recall_counts_per_T"] = classifier_counts_T
 
     if save_results:
+        feature_labels = to_device(feature_labels, "cpu")
         with open(output_path, "wb") as write_file:
             pickle.dump(feature_labels, write_file)
+        feature_labels = to_device(feature_labels, device)
 
     return feature_labels, misc_stats
 

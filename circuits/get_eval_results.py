@@ -10,6 +10,10 @@ import circuits.eval_sae_as_classifier as eval_sae
 from circuits.dictionary_learning.evaluation import evaluate
 
 
+def get_output_location(autoencoder_path: str, n_inputs: int) -> str:
+    return autoencoder_path + f"n_inputs_{n_inputs}_evals.pkl"
+
+
 def get_evals(
     autoencoder_path: str,
     n_inputs: int,
@@ -55,13 +59,11 @@ def get_evals(
     }
     results["hyperparameters"] = hyperparameters
     results["eval_results"] = eval_results
-
-    results = to_device(results, "cpu")
-
-    results_file_name = f"n_inputs_{n_inputs}_evals.pkl"
+    output_location = get_output_location(autoencoder_path, n_inputs)
 
     if save_results:
-        with open(autoencoder_path + results_file_name, "wb") as f:
+        results = to_device(results, "cpu")
+        with open(output_location, "wb") as f:
             pickle.dump(results, f)
 
     return results
