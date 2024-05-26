@@ -616,6 +616,7 @@ def construct_dataset(
 
 def get_recommended_custom_functions(othello: bool) -> list[Callable]:
     if not othello:
+        return get_all_chess_functions(othello)
         custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
     else:
         custom_functions = [
