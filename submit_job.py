@@ -30,13 +30,13 @@ if __name__ == "__main__":
 
     # set the args
     dry_run = False
-    trained_model = False
+    trained_model = True
     game = "othello"
     layer = 5
-    trainer_type = "standard"
+    trainer_type = "gated"
     save_dir = f"circuits/dictionary_learning/dictionaries/{game}-"\
                f"{'trained_model' if trained_model else 'random_model'}-"\
-               f"layer_{layer}-{trainer_type}"
+               f"layer_{layer}-{trainer_type}-2024-05-26"
 
     extra_args = []
     if dry_run:

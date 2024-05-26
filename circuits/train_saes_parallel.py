@@ -184,7 +184,7 @@ def run_sae_batch(
             )
     elif trainer_type == "standard":
         #initial_sparsity_penalty_ = t.linspace(0.03, 0.1, 20).tolist()    # chess
-        initial_sparsity_penalty_ = t.linspace(0.035, 0.9, 20).tolist()    # othello
+        initial_sparsity_penalty_ = t.linspace(0.035, 0.08, 20).tolist()    # othello
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
@@ -215,7 +215,7 @@ def run_sae_batch(
             )
     elif trainer_type == "gated":
         #initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()   # chess
-        initial_sparsity_penalty_ = t.linspace(0.2, 1.0, 20).tolist()   # othello
+        initial_sparsity_penalty_ = t.linspace(1.0, 2.0, 20).tolist()   # othello
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
