@@ -10,14 +10,14 @@ sbatch_template = """
 #SBATCH --job-name=__job_name__
 #SBATCH --output=__save_dir__/__job_name__.out
 #SBATCH -e __save_dir__/__job_name__.err
-#SBATCH --partition=gpu    # hgx-alpha
+#SBATCH --partition=superpod-a100    # gpu
 #
 #SBATCH -n 8
-#SBATCH --gres=gpu:1      # -G 1
+#SBATCH -G 1     # --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=3-00:00:00
+#SBATCH --time=2-00:00:00
 
-export PYTHONPATH="${PYTHONPATH}:/iesl/canvas/rangell/chess-gpt-circuits/"
+export PYTHONPATH="${PYTHONPATH}:/work/pi_mccallum_umass_edu/rangell_umass_edu/chess-gpt-circuits/"
 source ~/.bashrc
 eval "$(conda shell.bash hook)"
 conda activate sae
@@ -30,10 +30,10 @@ if __name__ == "__main__":
 
     # set the args
     dry_run = False
-    trained_model = True
+    trained_model = False
     game = "othello"
     layer = 5
-    trainer_type = "gated_anneal"
+    trainer_type = "standard"
     save_dir = f"circuits/dictionary_learning/dictionaries/{game}-"\
                f"{'trained_model' if trained_model else 'random_model'}-"\
                f"layer_{layer}-{trainer_type}"

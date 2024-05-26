@@ -60,14 +60,15 @@ def run_sae_batch(
         random_model : bool = False,
         dry_run : bool = False
 ):
-    assert not random_model
-
     if not othello:
         with open("models/meta.pkl", "rb") as f:
             meta = pickle.load(f)
 
         context_length = 256
-        model_name = "adamkarvonen/8LayerChessGPT2"
+        if random_model:
+            model_name = "adamkarvonen/RandomWeights8LayerChessGPT2"
+        else: 
+            model_name = "adamkarvonen/8LayerChessGPT2"
         dataset_name = "adamkarvonen/chess_sae_text"
         data = chess_hf_dataset_to_generator(
             dataset_name, meta, context_length=context_length, split="train", streaming=True
@@ -75,7 +76,10 @@ def run_sae_batch(
         model_type = "chess"
     else:
         context_length = 59
-        model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
+        if random_model:
+            model_name = "adamkarvonen/RandomWeights8LayerOthelloGPT2"
+        else:
+            model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
         dataset_name = "taufeeque/othellogpt"
         data = othello_hf_dataset_to_generator(
             dataset_name, context_length=context_length, split="train", streaming=True
@@ -88,7 +92,7 @@ def run_sae_batch(
     activation_dim = 512  # output dimension of the layer
 
     buffer_size = int(1e4 / 1)
-    llm_batch_size = 64 # 256 for A100 GPU
+    llm_batch_size = 256 # 256 for A100 GPU, 64 for 1080ti
     sae_batch_size = 8192
 
     num_tokens = 300_000_000

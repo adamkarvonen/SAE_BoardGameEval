@@ -70,7 +70,9 @@ def get_model(model_name: str, device: torch.device) -> NNsight:
 def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         return model.blocks[layer].hook_resid_post
-    if model_name == "adamkarvonen/8LayerChessGPT2":
+    if model_name in ["adamkarvonen/8LayerChessGPT2",
+                      "adamkarvonen/RandomWeights8LayerOthelloGPT2", 
+                      "adamkarvonen/RandomWeights8LayerChessGPT2"]:
         return model.transformer.h[layer]  # residual stream after the layer
     raise ValueError("Model not found.")
 
