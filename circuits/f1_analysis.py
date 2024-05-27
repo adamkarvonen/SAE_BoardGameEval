@@ -277,6 +277,126 @@ def update_dataframe_with_results(
     return df
 
 
+def add_average_board_reconstruction_for_columns(
+    df: pd.DataFrame,
+    average_metric_columns: list[str],
+    average_metric_idx_columns: list[str],
+    filter_columns: list[tuple[str, float]],
+    BSP_type: str,
+    metric_type: str = "best_f1_score_per_class",
+) -> tuple[pd.DataFrame, list[str], list[str]]:
+
+    combined_metric_name = f"{BSP_type}{metric_type}"
+    epsilon = 1e-8
+
+    filter_columns = [col for col, weight in filter_columns]
+
+    true_positive_columns = []
+    false_positive_columns = []
+    false_negative_columns = []
+    best_idx_columns = []
+
+    for col in df.columns:
+        if "best_num_true_positive" in col:
+            if any([low_level in col for low_level in filter_columns]):
+                true_positive_columns.append(col)
+        if "best_num_false_positive" in col:
+            if any([low_level in col for low_level in filter_columns]):
+                false_positive_columns.append(col)
+        if "best_num_false_negative" in col:
+            if any([low_level in col for low_level in filter_columns]):
+                false_negative_columns.append(col)
+
+        if "best_idx" in col and "threshold" not in col:
+            if any([low_level in col for low_level in filter_columns]):
+                best_idx_columns.append(col)
+
+    if len(true_positive_columns) == 0:
+        raise ValueError("No true positive columns found")
+    if len(false_positive_columns) == 0:
+        raise ValueError("No false positive columns found")
+    if len(false_negative_columns) == 0:
+        raise ValueError("No false negative columns found")
+    if len(best_idx_columns) == 0:
+        raise ValueError("No best idx columns found")
+
+    average_metric_column_name = f"average_{combined_metric_name}_f1"
+    average_metric_idx_column_name = f"average_{combined_metric_name}_best_idx"
+
+    df[f"average_{combined_metric_name}_true_positive"] = df[true_positive_columns].mean(axis=1)
+    df[f"average_{combined_metric_name}_false_positive"] = df[false_positive_columns].mean(axis=1)
+    df[f"average_{combined_metric_name}_false_negative"] = df[false_negative_columns].mean(axis=1)
+    df[average_metric_idx_column_name] = df[best_idx_columns].mean(axis=1)
+
+    df[f"average_{combined_metric_name}_precision"] = df[
+        f"average_{combined_metric_name}_true_positive"
+    ] / (
+        df[f"average_{combined_metric_name}_true_positive"]
+        + df[f"average_{combined_metric_name}_false_positive"]
+        + epsilon
+    )
+    df[f"average_{combined_metric_name}_recall"] = df[
+        f"average_{combined_metric_name}_true_positive"
+    ] / (
+        df[f"average_{combined_metric_name}_true_positive"]
+        + df[f"average_{combined_metric_name}_false_negative"]
+        + epsilon
+    )
+    df[average_metric_column_name] = (
+        2
+        * (
+            df[f"average_{combined_metric_name}_precision"]
+            * df[f"average_{combined_metric_name}_recall"]
+        )
+        / (
+            df[f"average_{combined_metric_name}_precision"]
+            + df[f"average_{combined_metric_name}_recall"]
+            + epsilon
+        )
+    )
+
+    average_metric_columns.append(average_metric_column_name)
+    average_metric_idx_columns.append(average_metric_idx_column_name)
+
+    # df[f'average_{metric_type}_f1'].fillna(0, inplace=True)  # Handling any NaN results
+
+    return df, average_metric_columns, average_metric_idx_columns
+
+
+def add_average_coverage_for_columns(
+    df: pd.DataFrame,
+    average_metric_columns: list[str],
+    average_metric_idx_columns: list[str],
+    filter_columns: list[tuple[str, float]],
+    BSP_type: str,
+    metric_type: str = "best_average_f1",
+) -> tuple[pd.DataFrame, list[str], list[str]]:
+
+    combined_metric_name = f"{BSP_type}{metric_type}"
+
+    average_metric_column_name = f"average_{combined_metric_name}"
+    average_metric_idx_column_name = f"average_{combined_metric_name}_best_idx"
+
+    filter_columns_idx = []
+
+    for column_name, weight in filter_columns:
+        filter_columns_idx.append(f"{column_name}_best_average_f1_idx")
+
+    df[average_metric_idx_column_name] = df[filter_columns_idx].mean(axis=1)
+
+    df[average_metric_column_name] = 0
+    total_weight = 0
+    for column_name, weight in filter_columns:
+        df[average_metric_column_name] += df[f"{column_name}_{metric_type}"] * weight
+        total_weight += weight
+    df[average_metric_column_name] /= total_weight
+
+    average_metric_columns.append(average_metric_column_name)
+    average_metric_idx_columns.append(average_metric_idx_column_name)
+
+    return df, average_metric_columns, average_metric_idx_columns
+
+
 def complete_analysis_pipeline(
     autoencoder_group_paths: list[str],
     csv_results_path: str,
