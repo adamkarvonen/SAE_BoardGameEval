@@ -363,6 +363,37 @@ def add_average_board_reconstruction_for_columns(
     return df, average_metric_columns, average_metric_idx_columns
 
 
+def add_average_high_level_board_reconstruction_for_columns(
+    df: pd.DataFrame,
+    average_metric_columns: list[str],
+    average_metric_idx_columns: list[str],
+    filter_columns: list[tuple[str, float]],
+    BSP_type: str,
+    metric_type: str = "best_f1_score_per_class",
+) -> tuple[pd.DataFrame, list[str], list[str]]:
+
+    filter_columns = [col for col, weight in filter_columns]
+    combined_metric_name = f"{BSP_type}{metric_type}"
+
+    average_metric_column_name = f"average_{combined_metric_name}"
+    average_metric_idx_column_name = f"average_{combined_metric_name}_best_idx"
+
+    filter_columns_idx = []
+
+    for column_name in filter_columns:
+        filter_columns_idx.append(f"{column_name}_best_idx")
+
+    filter_columns = [f"{col}_{metric_type}" for col in filter_columns]
+
+    df[average_metric_idx_column_name] = df[filter_columns_idx].mean(axis=1)
+    df[average_metric_column_name] = df[filter_columns].mean(axis=1)
+
+    average_metric_columns.append(average_metric_column_name)
+    average_metric_idx_columns.append(average_metric_idx_column_name)
+
+    return df, average_metric_columns, average_metric_idx_columns
+
+
 def add_average_coverage_for_columns(
     df: pd.DataFrame,
     average_metric_columns: list[str],
