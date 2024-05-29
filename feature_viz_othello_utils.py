@@ -173,13 +173,13 @@ def plot_lenses(model, ae, feat_idx, device):
 # def get_acts_attrs_VBSF(model, ae, games, submodule, device, compute_ie_embed=False):
 #     # Get feature acts and logit grads per feature
 #     logit_grads_per_feature_VNSF = t.zeros(
-#         (model.cfg.d_vocab_out, *games.shape, ae.dict_size),
+#         (model.cfg.d_vocab_out, *games.shape, hidden_dim),
 #         device=device,
 #         dtype=t.bfloat16
 #     )
 #     if compute_ie_embed:
 #         feature_grads_per_tokenembed_FBSV = t.zeros(
-#             (ae.dict_size, *games.shape, model.cfg.d_model),
+#             (hidden_dim, *games.shape, model.cfg.d_model),
 #             device=device,
 #             dtype=t.bfloat16
 #         )
@@ -192,7 +192,7 @@ def plot_lenses(model, ae, feat_idx, device):
 
 #         if compute_ie_embed:
 #             # Cache grads of features wrt each tokenembed
-#             for feat_idx in range(ae.dict_size):
+#             for feat_idx in range(hidden_dim):
 #                 model.zero_grad()
 #                 feature_grads_per_tokenembed_FBSV[feat_idx] = model.hook_embed.output.grad.save()
 #                 f[...,feat_idx].sum().backward(retain_graph=True)
@@ -217,7 +217,7 @@ def plot_lenses(model, ae, feat_idx, device):
 
 #     # Sort acts per tokenembed
 #     acts_per_tokenembed_VNF = t.zeros(
-#     (model.cfg.d_vocab, games.shape[0], ae.dict_size),
+#     (model.cfg.d_vocab, games.shape[0], hidden_dim),
 #     device=device
 #     )
 #     for game_idx, game in enumerate(games):
@@ -255,74 +255,89 @@ def get_acts_IEs_VN(model, ae, game_batches_LBS, submodule, feat_idx, device, co
     # L = game_batches_LBS.shape[0]/ n batches, B = game_batches_LBS.shape[1]/ games per batch
     # V = D_vocab(_out), N = L*B, S = n_ctx, F = D_feat
     # True shape during initialization is L,B instead of N = L*B
-    feature_acts_NSF = t.zeros((*game_batches_LBS.shape, ae.dict_size), device=device)
+
+    # this works for both SAE features and MLP neurons, referred to as "nodes"
+    if ae is not None:
+        # get results for SAE features
+        hidden_dim = ae.dict_size
+    else:
+        # get results for MLP neurons
+        hidden_dim = model.cfg.d_mlp
+
+
+    node_acts_NSF = t.zeros((*game_batches_LBS.shape, hidden_dim), device=device)
     embed_acts_NSF = t.zeros((*game_batches_LBS.shape, model.cfg.d_model), device=device)
     if compute_ie:
-        logit_grads_per_feature_VNS = t.zeros((model.cfg.d_vocab_out, *game_batches_LBS.shape), device=device)
-        feature_grads_per_tokenembed_NSM = t.zeros((*game_batches_LBS.shape, model.cfg.d_model), device=device)
+        logit_grads_per_node_VNS = t.zeros((model.cfg.d_vocab_out, *game_batches_LBS.shape), device=device)
+        node_grads_per_tokenembed_NSM = t.zeros((*game_batches_LBS.shape, model.cfg.d_model), device=device)
     
     L = game_batches_LBS.shape[0]
     N = L * game_batches_LBS.shape[1]
     for batch_idx in trange(L, desc='Games batch'):
         with model.trace(game_batches_LBS[batch_idx]): 
             embed_acts_NSF[batch_idx] = model.hook_embed.output.save()
-            x = submodule.output
-            f = ae.encode(x)
-            submodule.output = ae.decode(f)
-            feature_acts_NSF[batch_idx] = f.save() 
+
+            if ae is not None:
+                x = submodule.output
+                f = ae.encode(x)
+                submodule.output = ae.decode(f)
+                node_acts_NSF[batch_idx] = f.save()
+            else:
+                f = submodule.output
+                node_acts_NSF[batch_idx] = f.save()
 
             if compute_ie:
                 f.retain_grad()
-                # Cache grads of features wrt each tokenembed
+                # Cache grads of nodes wrt each tokenembed
                 model.zero_grad()
-                feature_grads_per_tokenembed_NSM[batch_idx] = model.hook_embed.output.grad.save()
+                node_grads_per_tokenembed_NSM[batch_idx] = model.hook_embed.output.grad.save()
                 f[..., feat_idx].sum().backward(retain_graph=True)
 
-                # Cache grads of logits wrt each feature
+                # Cache grads of logits wrt each node
                 for vocab_idx in range(model.cfg.d_vocab_out):
                     model.zero_grad()
                     logit_grads = f.grad.save()
-                    logit_grads_per_feature_VNS[vocab_idx][batch_idx] = logit_grads[..., feat_idx]
+                    logit_grads_per_node_VNS[vocab_idx][batch_idx] = logit_grads[..., feat_idx]
                     model.unembed.output[..., vocab_idx].sum().backward(retain_graph=True)
 
     # Reshape to collapse the batch dim
-    feature_acts_NSF = feature_acts_NSF.view(N, model.cfg.n_ctx, ae.dict_size)
-    feature_acts_NS = feature_acts_NSF[..., feat_idx]
-    del feature_acts_NSF
+    node_acts_NSF = node_acts_NSF.view(N, model.cfg.n_ctx, hidden_dim)
+    node_acts_NS = node_acts_NSF[..., feat_idx]
+    del node_acts_NSF
 
     # Sort per token (instead of sequence pos)
     acts_per_tokenembed_VN = t.zeros((model.cfg.d_vocab, N), device=device)
     for game_idx, game in enumerate(game_batches_LBS.view(N, -1)):
-        acts_per_tokenembed_VN[game, game_idx] = feature_acts_NS[game_idx]
+        acts_per_tokenembed_VN[game, game_idx] = node_acts_NS[game_idx]
 
     if compute_ie:
         # Reshape to collapse the batch dim
         embed_acts_NSF = embed_acts_NSF.view(N, model.cfg.n_ctx, model.cfg.d_model)
-        logit_grads_per_feature_VNS = logit_grads_per_feature_VNS.view(model.cfg.d_vocab_out, N, model.cfg.n_ctx)
-        feature_grads_per_tokenembed_NSM = feature_grads_per_tokenembed_NSM.view(N, model.cfg.n_ctx, model.cfg.d_model)
+        logit_grads_per_node_VNS = logit_grads_per_node_VNS.view(model.cfg.d_vocab_out, N, model.cfg.n_ctx)
+        node_grads_per_tokenembed_NSM = node_grads_per_tokenembed_NSM.view(N, model.cfg.n_ctx, model.cfg.d_model)
 
-        # Approximate indirect effect of features on logits via attribution patching (zero ablation), grad * (patch - clean)
+        # Approximate indirect effect of nodes on logits via attribution patching (zero ablation), grad * (patch - clean)
         # Each token occurs exactly once in the sequence, so we can sum over the sequence dim
-        ie_feature_to_logits_VN = (logit_grads_per_feature_VNS * (0 - feature_acts_NS)).sum(dim=-1)
-        del logit_grads_per_feature_VNS
-        # Approximate indirect effect of tokenembeds on features via attribution patching (mean ablation), grad * (patch - clean)
+        ie_node_to_logits_VN = (logit_grads_per_node_VNS * (0 - node_acts_NS)).sum(dim=-1)
+        del logit_grads_per_node_VNS
+        # Approximate indirect effect of tokenembeds on nodes via attribution patching (mean ablation), grad * (patch - clean)
         mean_embed_F = embed_acts_NSF.mean(dim=(0,1))
-        ie_tokenembed_to_features_NS = (feature_grads_per_tokenembed_NSM * (mean_embed_F - embed_acts_NSF)).sum(dim=-1)
+        ie_tokenembed_to_nodes_NS = (node_grads_per_tokenembed_NSM * (mean_embed_F - embed_acts_NSF)).sum(dim=-1)
         del embed_acts_NSF
         del mean_embed_F
 
         # Sort per token (instead of sequence pos)
-        ie_tokenembed_to_features_VN = t.zeros((model.cfg.d_vocab, N), device=device) 
+        ie_tokenembed_to_nodes_VN = t.zeros((model.cfg.d_vocab, N), device=device) 
         for game_idx, game in enumerate(game_batches_LBS.view(N, -1)):
-            ie_tokenembed_to_features_VN[game, game_idx] = ie_tokenembed_to_features_NS[game_idx]
-        del ie_tokenembed_to_features_NS 
+            ie_tokenembed_to_nodes_VN[game, game_idx] = ie_tokenembed_to_nodes_NS[game_idx]
+        del ie_tokenembed_to_nodes_NS 
 
     t.cuda.empty_cache()
     gc.collect()
 
     if compute_ie:
-        return feature_acts_NS, acts_per_tokenembed_VN, ie_feature_to_logits_VN, ie_tokenembed_to_features_VN
-    return feature_acts_NS, acts_per_tokenembed_VN, None, None
+        return node_acts_NS, acts_per_tokenembed_VN, ie_node_to_logits_VN, ie_tokenembed_to_nodes_VN
+    return node_acts_NS, acts_per_tokenembed_VN, None, None
 
 def plot_mean_metrics(acts_per_tokenembed_VN, ie_tokenembed_to_features_VN, ie_feature_to_logits_VN, feat_idx, n_games, with_ie, device):
     if with_ie:
@@ -362,6 +377,8 @@ def plot_top_k_games(feat_idx, games_batch_NS, feature_acts_NS, acts_per_tokenem
         game = games_batch_NS[game_idx].tolist()
         feature_act_S = feature_acts_NS[game_idx]
         max_abs_act, max_act_pos = feature_act_S.abs().max(dim=0)
+        max_act_square = othello_utils.to_board_label(othello_utils.itos[game[max_act_pos]])
+
         display(visualize_game_seq(game, feature_act_S, max_abs_act, prefix='feature activations: <br>'))
 
         if with_ie:
@@ -374,6 +391,6 @@ def plot_top_k_games(feat_idx, games_batch_NS, feature_acts_NS, acts_per_tokenem
         else:
             fig, ax0 = plt.subplots(1, 1, figsize=(5, 5))
 
-        plot_max_act_boardstate(ax0, game_idx, games_batch_NS, feature_acts_NS, max_act_pos, title='Feature activations on input tokens', device=device)
+        plot_max_act_boardstate(ax0, game_idx, games_batch_NS, feature_acts_NS, max_act_pos, title=f'Feature activations on input tokens\nat move #{max_act_pos}: {max_act_square}', device=device)
         fig.suptitle(f'Top {i+1} {sort_metric} game for feature #{feat_idx}')
         plt.show()
