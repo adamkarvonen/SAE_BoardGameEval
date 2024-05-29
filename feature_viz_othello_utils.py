@@ -150,11 +150,11 @@ def plot_lenses(model, ae, feat_idx, device):
     plt.show()
 
 
-# for given sae and games_batch, get the activations and attributions
 # Currently not used bc batch computing for all features doesn't fit in memory
+# for given sae and games_batch, get the activations and attributions
 def get_acts_attrs_VBSF(model, ae, games, submodule, device, compute_ie_embed=False):
     # Get feature acts and logit grads per feature
-    logit_grads_per_feature_VBSF = t.zeros(
+    logit_grads_per_feature_VNSF = t.zeros(
         (model.cfg.d_vocab_out, *games.shape, ae.dict_size),
         device=device,
         dtype=t.bfloat16
@@ -166,10 +166,10 @@ def get_acts_attrs_VBSF(model, ae, games, submodule, device, compute_ie_embed=Fa
             dtype=t.bfloat16
         )
     with model.trace(games): 
-        embeds = model.hook_embed.output.save()
+        embed_acts_NSF = model.hook_embed.output.save()
         x = submodule.output
         f = ae.encode(x)
-        feature_acts_BSF = f.save() 
+        feature_acts_NSF = f.save() 
         submodule.output = ae.decode(f)
 
         if compute_ie_embed:
@@ -182,32 +182,32 @@ def get_acts_attrs_VBSF(model, ae, games, submodule, device, compute_ie_embed=Fa
         # Cache grads of logits wrt each feature
         for vocab_idx in range(model.cfg.d_vocab_out):
             model.zero_grad()
-            logit_grads_per_feature_VBSF[vocab_idx] = f.grad.save()
+            logit_grads_per_feature_VNSF[vocab_idx] = f.grad.save()
             model.unembed.output[..., vocab_idx].sum().backward(retain_graph=True)
 
     if compute_ie_embed:
         # Approximate indirect effect of tokenembeds on features via attribution patching (mean ablation)
-        mean_embed = embeds.value.mean(dim=(0,1))
+        mean_embed = embed_acts_NSF.value.mean(dim=(0,1))
         ie_tokenembed_to_features_FBSV = (feature_grads_per_tokenembed_FBSV * (embeds - mean_embed))
         ie_tokenembed_to_features_VBF = ie_tokenembed_to_features_FBSV.sum(dim=-2).permute(2, 1, 0)
 
 
     # Approximate indirect effect of features on logits via attribution patching (zero ablation)
-    ie_feature_to_logits_VBSF = logit_grads_per_feature_VBSF * feature_acts_BSF
+    ie_feature_to_logits_VBSF = logit_grads_per_feature_VNSF * feature_acts_NSF
     # Each token occurs exactly once in the sequence, so we can sum over the sequence dim
     ie_feature_to_logits_VBF = ie_feature_to_logits_VBSF.sum(dim=-2)
 
     # Sort acts per tokenembed
-    acts_per_tokenembed_VBF = t.zeros(
+    acts_per_tokenembed_VNF = t.zeros(
     (model.cfg.d_vocab, games.shape[0], ae.dict_size),
     device=device
     )
     for game_idx, game in enumerate(games):
-        acts_per_tokenembed_VBF[game, game_idx] = feature_acts_BSF[game_idx]
+        acts_per_tokenembed_VNF[game, game_idx] = feature_acts_NSF[game_idx]
     
-    del feature_acts_BSF
-    del embeds
-    del logit_grads_per_feature_VBSF
+    del feature_acts_NSF
+    del embed_acts_NSF
+    del logit_grads_per_feature_VNSF
     del ie_feature_to_logits_VBSF
     if compute_ie_embed:
         del feature_grads_per_tokenembed_FBSV
@@ -216,105 +216,103 @@ def get_acts_attrs_VBSF(model, ae, games, submodule, device, compute_ie_embed=Fa
     gc.collect()
 
     if compute_ie_embed:
-        return acts_per_tokenembed_VBF, ie_feature_to_logits_VBF, ie_tokenembed_to_features_VBF
+        return acts_per_tokenembed_VNF, ie_feature_to_logits_VBF, ie_tokenembed_to_features_VBF
     else:
-        return acts_per_tokenembed_VBF, ie_feature_to_logits_VBF
+        return acts_per_tokenembed_VNF, ie_feature_to_logits_VBF
 
 # Compute once
 # games_batch = buffer.token_batch(batch_size=games_batch_size)
-# # acts_per_tokenembed_VBF, ie_feature_to_logits_VBF, ie_tokenembed_to_features_VBF = get_acts_attrs_VBSF(model, ae, games_batch, submodule compute_ie_embed=True)
-# acts_per_tokenembed_VBF, ie_feature_to_logits_VBF = get_acts_attrs_VBSF(model, ae, games_batch, submodule, compute_ie_embed=False)
+# # acts_per_tokenembed_VNF, ie_feature_to_logits_VBF, ie_tokenembed_to_features_VBF = get_acts_attrs_VBSF(model, ae, games_batch, submodule compute_ie_embed=True)
+# acts_per_tokenembed_VNF, ie_feature_to_logits_VBF = get_acts_attrs_VBSF(model, ae, games_batch, submodule, compute_ie_embed=False)
 
 # print(f'games_batch shape: {games_batch.shape}')
-# print(f'acts shape: {acts_per_tokenembed_VBF.shape}')
+# print(f'acts shape: {acts_per_tokenembed_VNF.shape}')
 # print(f'ie_feature_to_logits shape: {ie_feature_to_logits_VBF.shape}')
 # # print(f'ie_tokenembed_to_features shape: {ie_tokenembed_to_features_VBF.shape}')
 
 
 # for given sae and games_batch, get the activations and attributions
-def get_acts_IEs_VB(model, ae, game_batches_NBS, submodule, feat_idx, device, compute_ie_embed=False):
+def get_acts_IEs_VN(model, ae, game_batches_LBS, submodule, feat_idx, device, compute_ie_embed=False):
     # Get feature acts and logit grads per feature
-    # True shape during initialization is [V NBS F]. We reshape after model.trace
-    feature_acts_BSF = t.zeros((*game_batches_NBS.shape, ae.dict_size), device=device)
-    embeds = t.zeros((*game_batches_NBS.shape, model.cfg.d_model), device=device)
-    logit_grads_per_feature_VBS = t.zeros((model.cfg.d_vocab_out, *game_batches_NBS.shape), device=device)
+    # L = game_batches_LBS.shape[0]/ n batches, B = game_batches_LBS.shape[1]/ games per batch
+    # V = D_vocab(_out), N = L*B, S = n_ctx, F = D_feat
+    # True shape during initialization is L,B instead of N = L*B
+    feature_acts_NSF = t.zeros((*game_batches_LBS.shape, ae.dict_size), device=device)
+    embed_acts_NSF = t.zeros((*game_batches_LBS.shape, model.cfg.d_model), device=device)
+    logit_grads_per_feature_VNS = t.zeros((model.cfg.d_vocab_out, *game_batches_LBS.shape), device=device)
     if compute_ie_embed:
-        feature_grads_per_tokenembed_BSM = t.zeros((*game_batches_NBS.shape, model.cfg.d_model), device=device)
+        feature_grads_per_tokenembed_NSM = t.zeros((*game_batches_LBS.shape, model.cfg.d_model), device=device)
     
-    n_batches = game_batches_NBS.shape[0]
-    n_games_total = n_batches * game_batches_NBS.shape[1]
-    for batch_idx in range(n_batches):
-        with model.trace(game_batches_NBS[batch_idx]): 
-            embeds[batch_idx] = model.hook_embed.output.save()
+    L = game_batches_LBS.shape[0]
+    N = L * game_batches_LBS.shape[1]
+    for batch_idx in range(L):
+        with model.trace(game_batches_LBS[batch_idx]): 
+            embed_acts_NSF[batch_idx] = model.hook_embed.output.save()
             x = submodule.output
             f = ae.encode(x)
             submodule.output = ae.decode(f)
-            feature_acts_BSF[batch_idx] = f.save() 
+            feature_acts_NSF[batch_idx] = f.save() 
             f.retain_grad()
 
             if compute_ie_embed:
                 # Cache grads of features wrt each tokenembed
                 model.zero_grad()
-                feature_grads_per_tokenembed_BSM[batch_idx] = model.hook_embed.output.grad.save()
+                feature_grads_per_tokenembed_NSM[batch_idx] = model.hook_embed.output.grad.save()
                 f[..., feat_idx].sum().backward(retain_graph=True)
 
             # Cache grads of logits wrt each feature
             for vocab_idx in range(model.cfg.d_vocab_out):
                 model.zero_grad()
                 logit_grads = f.grad.save()
-                logit_grads_per_feature_VBS[vocab_idx][batch_idx] = logit_grads[..., feat_idx]
+                logit_grads_per_feature_VNS[vocab_idx][batch_idx] = logit_grads[..., feat_idx]
                 model.unembed.output[..., vocab_idx].sum().backward(retain_graph=True)
 
     # Reshape to collapse the batch dim
-    feature_acts_BSF = feature_acts_BSF.view(n_games_total, model.cfg.n_ctx, ae.dict_size)
-    embeds = embeds.view(n_games_total, model.cfg.n_ctx, model.cfg.d_model)
-    logit_grads_per_feature_VBS = logit_grads_per_feature_VBS.view(model.cfg.d_vocab_out, n_games_total, model.cfg.n_ctx)
+    feature_acts_NSF = feature_acts_NSF.view(N, model.cfg.n_ctx, ae.dict_size)
+    feature_acts_NS = feature_acts_NSF[..., feat_idx]
+    del feature_acts_NSF
+
+    embed_acts_NSF = embed_acts_NSF.view(N, model.cfg.n_ctx, model.cfg.d_model)
+    logit_grads_per_feature_VNS = logit_grads_per_feature_VNS.view(model.cfg.d_vocab_out, N, model.cfg.n_ctx)
     if compute_ie_embed:
-        feature_grads_per_tokenembed_BSM = feature_grads_per_tokenembed_BSM.view(n_games_total, model.cfg.n_ctx, model.cfg.d_model)
+        feature_grads_per_tokenembed_NSM = feature_grads_per_tokenembed_NSM.view(N, model.cfg.n_ctx, model.cfg.d_model)
 
     # Approximate indirect effect of features on logits via attribution patching (zero ablation), grad * (patch - clean)
-    ie_feature_to_logits_VBS = logit_grads_per_feature_VBS * (0 - feature_acts_BSF[..., feat_idx])
     # Each token occurs exactly once in the sequence, so we can sum over the sequence dim
-    ie_feature_to_logits_VB = ie_feature_to_logits_VBS.sum(dim=-1)
+    ie_feature_to_logits_VN = (logit_grads_per_feature_VNS * (0 - feature_acts_NS)).sum(dim=-1)
+    del logit_grads_per_feature_VNS
 
     # Sort per token (instead of sequence pos)
-    feature_acts_BS = feature_acts_BSF[..., feat_idx]
-    acts_per_tokenembed_VB = t.zeros((model.cfg.d_vocab, n_games_total), device=device)
-    for game_idx, game in enumerate(game_batches_NBS.view(n_games_total, -1)):
-        acts_per_tokenembed_VB[game, game_idx] = feature_acts_BS[game_idx]
+    acts_per_tokenembed_VN = t.zeros((model.cfg.d_vocab, N), device=device)
+    for game_idx, game in enumerate(game_batches_LBS.view(N, -1)):
+        acts_per_tokenembed_VN[game, game_idx] = feature_acts_NS[game_idx]
 
     if compute_ie_embed:
         # Approximate indirect effect of tokenembeds on features via attribution patching (mean ablation), grad * (patch - clean)
-        mean_embed = embeds.mean(dim=(0,1))
-        ie_tokenembed_to_features_BSM = feature_grads_per_tokenembed_BSM * (mean_embed - embeds)
-        ie_tokenembed_to_features_BS = ie_tokenembed_to_features_BSM.sum(dim=-1)
+        mean_embed_F = embed_acts_NSF.mean(dim=(0,1))
+        ie_tokenembed_to_features_NS = (feature_grads_per_tokenembed_NSM * (mean_embed_F - embed_acts_NSF)).sum(dim=-1)
+        del embed_acts_NSF
+        del mean_embed_F
 
         # Sort per token (instead of sequence pos)
-        ie_tokenembed_to_features_VB = t.zeros((model.cfg.d_vocab, n_games_total), device=device) 
-        for game_idx, game in enumerate(game_batches_NBS.view(n_games_total, -1)):
-            ie_tokenembed_to_features_VB[game, game_idx] = ie_tokenembed_to_features_BS[game_idx]
-            
-        del feature_grads_per_tokenembed_BSM
-        del ie_tokenembed_to_features_BS
-
+        ie_tokenembed_to_features_VN = t.zeros((model.cfg.d_vocab, N), device=device) 
+        for game_idx, game in enumerate(game_batches_LBS.view(N, -1)):
+            ie_tokenembed_to_features_VN[game, game_idx] = ie_tokenembed_to_features_NS[game_idx]
+        del ie_tokenembed_to_features_NS 
     
-    del feature_acts_BSF
-    del embeds
-    del logit_grads_per_feature_VBS
-    del ie_feature_to_logits_VBS
     t.cuda.empty_cache()
     gc.collect()
 
     if compute_ie_embed:
-        return feature_acts_BS, acts_per_tokenembed_VB, ie_feature_to_logits_VB, ie_tokenembed_to_features_VB
-    return feature_acts_BS, acts_per_tokenembed_VB, ie_feature_to_logits_VB
+        return feature_acts_NS, acts_per_tokenembed_VN, ie_feature_to_logits_VN, ie_tokenembed_to_features_VN
+    return feature_acts_NS, acts_per_tokenembed_VN, ie_feature_to_logits_VN
 
-def plot_mean_metrics(acts_per_tokenembed_VB, ie_tokenembed_to_features_VB, ie_feature_to_logits_VB, feat_idx, n_games, device):
+def plot_mean_metrics(acts_per_tokenembed_VN, ie_tokenembed_to_features_VN, ie_feature_to_logits_VN, feat_idx, n_games, device):
     fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
-    mean_feature_activations_tokenembed_V = acts_per_tokenembed_VB.mean(dim=-1)
-    mean_ie_tokenembed_to_features_V = ie_tokenembed_to_features_VB.mean(dim=-1)
-    mean_logit_attributions_V = ie_feature_to_logits_VB.mean(dim=-1)
+    mean_feature_activations_tokenembed_V = acts_per_tokenembed_VN.mean(dim=-1)
+    mean_ie_tokenembed_to_features_V = ie_tokenembed_to_features_VN.mean(dim=-1)
+    mean_logit_attributions_V = ie_feature_to_logits_VN.mean(dim=-1)
     visualize_vocab(axs[0], mean_feature_activations_tokenembed_V[1:], title=f'Feature activations', device=device)
     visualize_vocab(axs[1], mean_ie_tokenembed_to_features_V[1:], title=f'IE token_embed --> feature\n(AP, mean ablation)', device=device)
     visualize_vocab(axs[2], mean_logit_attributions_V[1:], title=f'IE feature --> logits\n(AP, zero ablation)', device=device)
@@ -322,27 +320,27 @@ def plot_mean_metrics(acts_per_tokenembed_VB, ie_tokenembed_to_features_VB, ie_f
     fig.suptitle(f'Mean metrics over {n_games} games for feature #{feat_idx}')
     plt.show()
 
-def plot_top_k_games(feat_idx, games_batch_BS, feature_acts_BS, acts_per_tokenembed_VB, ie_tokenembed_to_features_VB, ie_feature_to_logits_VB, device, sort_metric='activation', k=10):
+def plot_top_k_games(feat_idx, games_batch_NS, feature_acts_NS, acts_per_tokenembed_VN, ie_tokenembed_to_features_VN, ie_feature_to_logits_VN, device, sort_metric='activation', k=10):
     if sort_metric == 'activation':
-        top_game_indices = acts_per_tokenembed_VB.abs().max(dim=0)[0].topk(k).indices
+        top_game_indices = acts_per_tokenembed_VN.abs().max(dim=0)[0].topk(k).indices
     elif sort_metric == 'ie_embed':
-        top_game_indices = ie_tokenembed_to_features_VB.abs().max(dim=0)[0].topk(k).indices
+        top_game_indices = ie_tokenembed_to_features_VN.abs().max(dim=0)[0].topk(k).indices
     elif sort_metric == 'ie_logit':
-        top_game_indices = ie_feature_to_logits_VB.abs().max(dim=0)[0].topk(k).indices
+        top_game_indices = ie_feature_to_logits_VN.abs().max(dim=0)[0].topk(k).indices
 
     print(top_game_indices)
 
     for i, game_idx in enumerate(top_game_indices):
         print(f"Top {i+1} {sort_metric} game:")
 
-        game = games_batch_BS[game_idx].tolist()
-        feature_act_S = feature_acts_BS[game_idx]
+        game = games_batch_NS[game_idx].tolist()
+        feature_act_S = feature_acts_NS[game_idx]
         max_abs_act = feature_act_S.abs().max()
         display(visualize_game_seq(game, feature_act_S, max_abs_act, prefix='feature activations: <br>'))
 
-        acts_V = acts_per_tokenembed_VB[:, game_idx]
-        ie_embed_V = ie_tokenembed_to_features_VB[:, game_idx]
-        ie_logit_V = ie_feature_to_logits_VB[:, game_idx]
+        acts_V = acts_per_tokenembed_VN[:, game_idx]
+        ie_embed_V = ie_tokenembed_to_features_VN[:, game_idx]
+        ie_logit_V = ie_feature_to_logits_VN[:, game_idx]
 
 
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
