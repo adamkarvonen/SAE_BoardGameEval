@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import gc
 from IPython.display import HTML, display
 from tqdm import trange
+from typing import Optional
 
 
 def convert_othello_dataset_sample_to_board(sample_i, move_idx=None):
@@ -119,17 +120,49 @@ def visualize_game_seq(context_i, activations, max_value, prefix=""):
     return HTML(combined_html)
 
 
-def cossim_logit_feature_decoder(model, ae, feat_idx):
-    feat_decoder_vec = ae.decoder.weight[:, feat_idx]
+def cossim_logit_feature_decoder(
+    model, ae, feat_idx: int, node_type: str, layer: Optional[int] = None
+):
+    if node_type == "sae_feature":
+        d_model_vec = ae.decoder.weight[:, feat_idx]
+    elif node_type == "mlp_neuron":
+        if layer == None:
+            raise ValueError("Must specify layer for MLP neuron")
+        d_model_vec = model.blocks[layer].mlp.W_out[feat_idx, :]
+    else:
+        raise ValueError(f"Unknown node type {node_type}")
     cossim = t.cosine_similarity(
-        feat_decoder_vec, model.W_U[:, 1:].T, dim=1
+        d_model_vec, model.W_U[:, 1:].T, dim=1
     )  # NOTE 0 is a special token?
     return cossim
 
 
-def cossim_tokenembed_feature_decoder(model, ae, feat_idx):
-    feat_decoder_vec = ae.decoder.weight[:, feat_idx]
-    cossim = t.cosine_similarity(feat_decoder_vec, model.W_E[1:, :], dim=1)
+def logit_lens(model, ae, feat_idx: int, node_type: str, layer: Optional[int] = None):
+    if node_type == "sae_feature":
+        d_model_vec = ae.decoder.weight[:, feat_idx]
+    elif node_type == "mlp_neuron":
+        if layer == None:
+            raise ValueError("Must specify layer for MLP neuron")
+        d_model_vec = model.blocks[layer].mlp.W_out[feat_idx, :]
+    else:
+        raise ValueError(f"Unknown node type {node_type}")
+
+    logit_lens = d_model_vec @ model.W_U[:, 1:]
+    return logit_lens
+
+
+def cossim_tokenembed_feature_decoder(
+    model, ae, feat_idx: int, node_type: str, layer: Optional[int] = None
+):
+    if node_type == "sae_feature":
+        d_model_vec = ae.decoder.weight[:, feat_idx]
+    elif node_type == "mlp_neuron":
+        if layer == None:
+            raise ValueError("Must specify layer for MLP neuron")
+        d_model_vec = model.blocks[layer].mlp.W_out[feat_idx, :]
+    else:
+        raise ValueError(f"Unknown node type {node_type}")
+    cossim = t.cosine_similarity(d_model_vec, model.W_E[1:, :], dim=1)
     return cossim
 
 
@@ -160,26 +193,40 @@ def visualize_vocab(ax, vocab_vals, device, title=""):
 
     # Specify the number of ticks for the colorbar using linspace
     ticks = t.linspace(vmin, vmax, 5)
-    cbar = plt.colorbar(plt.cm.ScalarMappable(cmap=cmap, norm=norm), ax=ax, ticks=ticks)
+    cbar = plt.colorbar(
+        plt.cm.ScalarMappable(cmap=cmap, norm=norm), ax=ax, ticks=ticks, fraction=0.046, pad=0.04
+    )
     cbar.ax.set_yticklabels([f"{tick:.2f}" for tick in ticks])
     ax.set_xticks(range(8))
     ax.set_xticklabels(["A", "B", "C", "D", "E", "F", "G", "H"])
     ax.set_title(title)
 
 
-def visualize_lens(ax, model, ae, feat_idx, cossim_func, device, title=""):
-    cossim = cossim_func(model, ae, feat_idx)
+def visualize_lens(
+    ax,
+    model,
+    ae,
+    feat_idx: int,
+    node_type: str,
+    layer: Optional[int],
+    cossim_func,
+    device,
+    title: str = "",
+):
+    cossim = cossim_func(model, ae, feat_idx, node_type, layer)
     visualize_vocab(ax, cossim, title=title, device=device)
 
 
-def plot_lenses(model, ae, feat_idx, device):
-    fig, axs = plt.subplots(1, 2, figsize=(8, 4))
+def plot_lenses(model, ae, feat_idx: int, device: str, node_type: str, layer: Optional[int] = None):
+    fig, axs = plt.subplots(1, 3, figsize=(10, 6))
 
     visualize_lens(
         axs[0],
         model,
         ae,
         feat_idx,
+        node_type,
+        layer,
         cossim_tokenembed_feature_decoder,
         title="with token_embed",
         device=device,
@@ -189,7 +236,20 @@ def plot_lenses(model, ae, feat_idx, device):
         model,
         ae,
         feat_idx,
+        node_type,
+        layer,
         cossim_logit_feature_decoder,
+        title="with unembed (cosine sim)",
+        device=device,
+    )
+    visualize_lens(
+        axs[2],
+        model,
+        ae,
+        feat_idx,
+        node_type,
+        layer,
+        logit_lens,
         title="with unembed (logit lens)",
         device=device,
     )
@@ -286,11 +346,6 @@ def get_acts_IEs_VN(model, ae, game_batches_LBS, submodule, feat_idx, device, co
     # V = D_vocab(_out), N = L*B, S = n_ctx, F = D_feat
     # True shape during initialization is L,B instead of N = L*B
 
-    if compute_ie:
-        t.set_grad_enabled(True)
-    else:
-        t.set_grad_enabled(False)
-
     # this works for both SAE features and MLP neurons, referred to as "nodes"
     if ae is not None:
         # get results for SAE features
@@ -375,6 +430,7 @@ def get_acts_IEs_VN(model, ae, game_batches_LBS, submodule, feat_idx, device, co
         for game_idx, game in enumerate(game_batches_LBS.view(N, -1)):
             ie_tokenembed_to_nodes_VN[game, game_idx] = ie_tokenembed_to_nodes_NS[game_idx]
         del ie_tokenembed_to_nodes_NS
+        del node_grads_per_tokenembed_NSM
 
     t.cuda.empty_cache()
     gc.collect()
