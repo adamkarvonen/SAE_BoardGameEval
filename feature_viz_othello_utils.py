@@ -144,9 +144,8 @@ def convert_seq_to_board_tensor(seq, game, device) -> t.Tensor:
     """The game sequence is a list of token indices, where each token is a single integer. We have to sort by the board indices to get the correct board tensor."""
     # map from token index to board index
     ll_board = t.zeros(64, device=device)
-    game_s = [othello_utils.itos[s] for s in game]
-    board_indices = [othello_utils.stoi_indices.index(token) for token in game_s]
-    ll_board[board_indices] = seq
+    game_s = [othello_utils.itos[i] for i in game]
+    ll_board[game_s] = seq
     ll_board = ll_board.view(8, 8)
     return ll_board
 
