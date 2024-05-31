@@ -103,6 +103,13 @@ def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
 
 
 def get_identity_autoencoder(config: dict) -> IdentityDict:
+    """The identity autoencoder just returns activations as is. We can use this to run the full pipeline
+    on GPT activations rather than autoencoder activations.
+    To use this, run `autoencoders/gen_identity_ae_folders.ipynb` to generate the identity autoencoder folders.
+    Then, in full_pipeline.ipynb, set:
+    autoencoder_group_paths = ["../autoencoders/chess_mlp_acts_identity_aes/"]
+    csv_output_path = "../autoencoders/chess_mlp_acts_identity_aes/results.csv"
+    submodule_type = SubmoduleType.mlp_act"""
     ae = IdentityDict()
     ae.activation_dim = config["trainer"]["activation_dim"]
     ae.dict_size = config["trainer"]["dict_size"]
