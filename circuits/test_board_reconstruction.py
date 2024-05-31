@@ -10,6 +10,7 @@ from circuits.utils import (
     collect_activations_batch,
     get_nested_folders,
     to_device,
+    SubmoduleType,
 )
 import circuits.eval_sae_as_classifier as eval_sae
 import circuits.chess_utils as chess_utils
@@ -336,13 +337,22 @@ def test_board_reconstructions(
     save_results: bool = True,
     precomputed: bool = True,
     mask: bool = False,
+    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> dict:
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
 
     data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
-        autoencoder_path, batch_size, "", model_name, data, device, n_inputs, othello
+        autoencoder_path,
+        batch_size,
+        "",
+        model_name,
+        data,
+        device,
+        n_inputs,
+        othello,
+        submodule_type,
     )
 
     ae_bundle.buffer = None

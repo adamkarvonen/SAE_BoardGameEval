@@ -11,11 +11,17 @@ import os
 from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 from transformer_lens import HookedTransformer
+from enum import Enum
 
 from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.chess_utils import encode_string
 from circuits.dictionary_learning import ActivationBuffer
-from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
+from circuits.dictionary_learning.dictionary import (
+    AutoEncoder,
+    GatedAutoEncoder,
+    AutoEncoderNew,
+    IdentityDict,
+)
 from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
@@ -38,6 +44,11 @@ class AutoEncoderBundle:
     dictionary_size: int
     context_length: int
     submodule: Any
+
+
+class SubmoduleType(Enum):
+    resid_post = "resid_post"
+    mlp_act = "mlp_act"
 
 
 def get_model(model_name: str, device: torch.device) -> NNsight:
@@ -67,14 +78,35 @@ def get_model(model_name: str, device: torch.device) -> NNsight:
     raise ValueError("Model not found.")
 
 
+def get_mlp_activations_submodule(model_name: str, layer: int, model: NNsight) -> Any:
+    if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
+        return model.blocks[layer].mlp.hook_post
+    if model_name in [
+        "adamkarvonen/8LayerChessGPT2",
+        "adamkarvonen/RandomWeights8LayerOthelloGPT2",
+        "adamkarvonen/RandomWeights8LayerChessGPT2",
+    ]:
+        return model.transformer.h[layer].mlp.act
+    raise ValueError("Model not found.")
+
+
 def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         return model.blocks[layer].hook_resid_post
-    if model_name in ["adamkarvonen/8LayerChessGPT2",
-                      "adamkarvonen/RandomWeights8LayerOthelloGPT2", 
-                      "adamkarvonen/RandomWeights8LayerChessGPT2"]:
+    if model_name in [
+        "adamkarvonen/8LayerChessGPT2",
+        "adamkarvonen/RandomWeights8LayerOthelloGPT2",
+        "adamkarvonen/RandomWeights8LayerChessGPT2",
+    ]:
         return model.transformer.h[layer]  # residual stream after the layer
     raise ValueError("Model not found.")
+
+
+def get_identity_autoencoder(config: dict) -> IdentityDict:
+    ae = IdentityDict()
+    ae.activation_dim = config["trainer"]["activation_dim"]
+    ae.dict_size = config["trainer"]["dict_size"]
+    return ae
 
 
 def get_ae_bundle(
@@ -85,6 +117,7 @@ def get_ae_bundle(
     model_path: str = "models/",
     model_name: str = "adamkarvonen/8LayerChessGPT2",
     n_ctxs: int = 512,
+    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> AutoEncoderBundle:
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
@@ -92,34 +125,76 @@ def get_ae_bundle(
     with open(autoencoder_config_path, "r") as f:
         config = json.load(f)
 
-    # rangell: this is a super hacky way to get the correct dictionary class from the config
-    # TODO (rangell): make this better in the future.
-    # old: ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
-    config_args = []
-    for k, v in config["trainer"].items():
-        if k not in ["trainer_class", "sparsity_penalty"]:
-            if isinstance(v, str) and k != "dict_class":
-                config_args.append(k + "=" + "'" + v + "'")
-            else:
-                config_args.append(k + "=" + str(v))
-    config_str = ", ".join(config_args)
-    ae = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__.from_pretrained(
-        autoencoder_model_path, device=device
-    )
-    ae = ae.to(device)
+    use_identity_dict = False
+
+    if "dict_class" in config["trainer"]:
+        if config["trainer"]["dict_class"] == "Identity":
+            use_identity_dict = True
+
+    if use_identity_dict:
+        ae = get_identity_autoencoder(config)
+    else:
+        # rangell: this is a super hacky way to get the correct dictionary class from the config
+        # TODO (rangell): make this better in the future.
+        # old: ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
+        config_args = []
+        for k, v in config["trainer"].items():
+            if k not in ["trainer_class", "sparsity_penalty"]:
+                if isinstance(v, str) and k != "dict_class":
+                    config_args.append(k + "=" + "'" + v + "'")
+                else:
+                    config_args.append(k + "=" + str(v))
+        config_str = ", ".join(config_args)
+        ae = eval(
+            config["trainer"]["trainer_class"] + f"({config_str})"
+        ).ae.__class__.from_pretrained(autoencoder_model_path, device=device)
+        ae = ae.to(device)
 
     _model_name = config["trainer"]["lm_name"]
     assert model_name == _model_name
 
     layer = config["trainer"]["layer"]
 
-    model = get_model(model_name, device)
-    submodule = get_submodule(model_name, layer, model)
+    # The following commented lines are for some legacy autoencoders
+    # that don't have the layer specified in the config file.
+    # if "layer_0" in autoencoder_model_path:
+    #     layer = 0
+    # elif "layer_1" in autoencoder_model_path:
+    #     layer = 1
+    # elif "layer_2" in autoencoder_model_path:
+    #     layer = 2
+    # elif "layer_3" in autoencoder_model_path:
+    #     layer = 3
+    # elif "layer_4" in autoencoder_model_path:
+    #     layer = 4
+    # elif "layer_5" in autoencoder_model_path:
+    #     layer = 5
+    # elif "layer_6" in autoencoder_model_path:
+    #     layer = 6
+    # elif "layer_7" in autoencoder_model_path:
+    #     layer = 7
+    # elif "layer_8" in autoencoder_model_path:
+    #     layer = 8
+    # else:
+    #     raise ValueError("layer not specified in autoencoder_model_path")
 
-    context_length = config["buffer"]["ctx_len"]
+    print("Evaluating on layer: ", layer)
 
     activation_dim = ae.activation_dim
     dictionary_size = ae.dict_size
+
+    model = get_model(model_name, device)
+
+    if submodule_type == submodule_type.resid_post:
+        assert activation_dim == 512
+        submodule = get_submodule(model_name, layer, model)
+    elif submodule_type == submodule_type.mlp_act:
+        assert activation_dim == 512 * 4
+        submodule = get_mlp_activations_submodule(model_name, layer, model)
+    else:
+        raise ValueError("submodule_type not recognized")
+
+    context_length = config["buffer"]["ctx_len"]
 
     buffer = NNsightActivationBuffer(
         data,
@@ -246,11 +321,12 @@ def get_model_activations(
     batch_results = []
     for i in range(inputs_AL.shape[0] // batch_size + 1):
         start = i * batch_size
-        end = min((i+1) * batch_size, inputs_AL.shape[0])
+        end = min((i + 1) * batch_size, inputs_AL.shape[0])
         if start == end:
             break
         with ae_bundle.model.trace(
-            inputs_AL[start:end], invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
+            inputs_AL[start:end],
+            invoker_args=dict(max_length=ae_bundle.context_length, truncation=True),
         ):
             cur_activations = ae_bundle.submodule.output.save()
             if type(cur_activations.shape) == tuple:
