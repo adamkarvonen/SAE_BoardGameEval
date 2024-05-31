@@ -445,8 +445,8 @@ def aggregate_statistics(
 ) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py.
-    precomputed will precompute the entire dataset and model activations and store them in memory.
-    Faster, but uses far more VRAM."""
+    precomputed will precompute the entire dataset and store it in memory.
+    Faster, but uses more VRAM."""
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
