@@ -250,16 +250,16 @@ def calculate_F1_scores(
 
         false_negatives_T = results[custom_function.__name__]["num_false_negative_squares"]
 
-        precision = num_true_positive_squares_T / (num_positives_T + epsilon)
-        recall = num_true_positive_squares_T / (
+        precision_T = num_true_positive_squares_T / (num_positives_T + epsilon)
+        recall_T = num_true_positive_squares_T / (
             num_true_positive_squares_T + false_negatives_T + epsilon
         )
 
         # Calculate F1 score
-        f1_scores = 2 * (precision * recall) / (precision + recall + epsilon)
-        results[custom_function.__name__]["precision_per_class"] = precision
-        results[custom_function.__name__]["recall_per_class"] = recall
-        results[custom_function.__name__]["f1_score_per_class"] = f1_scores
+        f1_scores_T = 2 * (precision_T * recall_T) / (precision_T + recall_T + epsilon)
+        results[custom_function.__name__]["precision_per_class"] = precision_T
+        results[custom_function.__name__]["recall_per_class"] = recall_T
+        results[custom_function.__name__]["f1_score_per_class"] = f1_scores_T
 
         num_true_and_false_positive_squares_T = results[custom_function.__name__][
             "num_true_and_false_positive_squares"
@@ -271,15 +271,15 @@ def calculate_F1_scores(
         )
         adjusted_positives_T = adjusted_true_positive_squares_T + num_false_positive_squares_T
 
-        precision = adjusted_true_positive_squares_T / (adjusted_positives_T + epsilon)
-        recall = adjusted_true_positive_squares_T / (
+        precision_T = adjusted_true_positive_squares_T / (adjusted_positives_T + epsilon)
+        recall_T = adjusted_true_positive_squares_T / (
             adjusted_true_positive_squares_T + false_negatives_T + epsilon
         )
 
-        f1_scores = 2 * (precision * recall) / (precision + recall + epsilon)
-        results[custom_function.__name__]["precision_per_square"] = precision
-        results[custom_function.__name__]["recall_per_square"] = recall
-        results[custom_function.__name__]["f1_score_per_square"] = f1_scores
+        f1_scores_T = 2 * (precision_T * recall_T) / (precision_T + recall_T + epsilon)
+        results[custom_function.__name__]["precision_per_square"] = precision_T
+        results[custom_function.__name__]["recall_per_square"] = recall_T
+        results[custom_function.__name__]["f1_score_per_square"] = f1_scores_T
     return results
 
 
