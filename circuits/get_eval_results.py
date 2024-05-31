@@ -1,11 +1,8 @@
 import pickle
 import torch
 
-from circuits.utils import (
-    get_nested_folders,
-    to_device,
-)
 import circuits.eval_sae_as_classifier as eval_sae
+import circuits.utils as utils
 
 from circuits.dictionary_learning.evaluation import evaluate
 
@@ -24,12 +21,21 @@ def get_evals(
     data: dict,
     othello: bool = False,
     save_results: bool = True,
+    submodule_type: utils.SubmoduleType = utils.SubmoduleType.resid_post,
 ) -> dict:
 
     torch.set_grad_enabled(False)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_firing_rate_data(
-        autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
+    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
+        autoencoder_path,
+        batch_size,
+        model_path,
+        model_name,
+        data,
+        device,
+        n_inputs,
+        othello,
+        submodule_type,
     )
 
     if othello:
@@ -62,7 +68,7 @@ def get_evals(
     output_location = get_output_location(autoencoder_path, n_inputs)
 
     if save_results:
-        results = to_device(results, "cpu")
+        results = utils.to_device(results, "cpu")
         with open(output_location, "wb") as f:
             pickle.dump(results, f)
 
@@ -94,7 +100,7 @@ def get_sae_group_evals(
     for autoencoder_group_path in autoencoder_group_paths:
         print(f"Autoencoder group path: {autoencoder_group_path}")
 
-        folders = get_nested_folders(autoencoder_group_path)
+        folders = utils.get_nested_folders(autoencoder_group_path)
         for autoencoder_path in folders:
             print("Evaluating autoencoder:", autoencoder_path)
             get_evals(

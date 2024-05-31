@@ -19,6 +19,7 @@ from circuits.utils import (
     get_firing_features,
     to_device,
     AutoEncoderBundle,
+    SubmoduleType,
 )
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
@@ -387,7 +388,7 @@ def filter_data_by_custom_indices(
     return activations_FBI, batch_data
 
 
-def prep_firing_rate_data(
+def prep_data_ae_buffer_and_model(
     autoencoder_path: str,
     batch_size: int,
     model_path: str,
@@ -396,8 +397,12 @@ def prep_firing_rate_data(
     device: torch.device,
     n_inputs: int,
     othello: bool = False,
+    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
-    """Moves data from the data dictionary into the NNsight activation buffer."""
+    """Moves data from the data dictionary into the NNsight activation buffer.
+    We also load the autoencoder and model, and move them to the device.
+    We remove the decoded_inputs and encoded_inputs from the data dictionary and return them separately.
+    """
     for key in data:
         if key == "decoded_inputs" or key == "encoded_inputs":
             continue
@@ -408,11 +413,18 @@ def prep_firing_rate_data(
     del data["decoded_inputs"]
     del data["encoded_inputs"]
 
-    firing_rate_data = iter(encoded_inputs)
+    activation_buffer_data = iter(encoded_inputs)
     n_ctxs = min(512, n_inputs)
 
     ae_bundle = get_ae_bundle(
-        autoencoder_path, device, firing_rate_data, batch_size, model_path, model_name, n_ctxs
+        autoencoder_path,
+        device,
+        activation_buffer_data,
+        batch_size,
+        model_path,
+        model_name,
+        n_ctxs,
+        submodule_type,
     )
     ae_bundle.ae = ae_bundle.ae.to(device)
 
@@ -439,18 +451,27 @@ def aggregate_statistics(
     othello: bool = False,
     save_results: bool = True,
     precomputed: bool = True,
+    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py.
-    precomputed will precompute the entire dataset and model activations and store them in memory.
-    Faster, but uses far more VRAM."""
+    precomputed will precompute the entire dataset and store it in memory.
+    Faster, but uses more VRAM."""
 
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
     indexing_function_name = get_indexing_function_name(indexing_function)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = prep_firing_rate_data(
-        autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
+    data, ae_bundle, pgn_strings, encoded_inputs = prep_data_ae_buffer_and_model(
+        autoencoder_path,
+        batch_size,
+        model_path,
+        model_name,
+        data,
+        device,
+        n_inputs,
+        othello,
+        submodule_type,
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
