@@ -28,7 +28,7 @@ def get_evals(
 
     torch.set_grad_enabled(False)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_firing_rate_data(
+    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
         autoencoder_path, batch_size, model_path, model_name, data, device, n_inputs, othello
     )
 

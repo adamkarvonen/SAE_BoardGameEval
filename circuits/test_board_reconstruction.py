@@ -341,7 +341,7 @@ def test_board_reconstructions(
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
 
-    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_firing_rate_data(
+    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
         autoencoder_path, batch_size, "", model_name, data, device, n_inputs, othello
     )
 
