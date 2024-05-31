@@ -137,20 +137,6 @@ def cossim_logit_feature_decoder(
     return cossim
 
 
-def logit_lens(model, ae, feat_idx: int, node_type: str, layer: Optional[int] = None):
-    if node_type == "sae_feature":
-        d_model_vec = ae.decoder.weight[:, feat_idx]
-    elif node_type == "mlp_neuron":
-        if layer == None:
-            raise ValueError("Must specify layer for MLP neuron")
-        d_model_vec = model.blocks[layer].mlp.W_out[feat_idx, :]
-    else:
-        raise ValueError(f"Unknown node type {node_type}")
-
-    logit_lens = d_model_vec @ model.W_U[:, 1:]
-    return logit_lens
-
-
 def cossim_tokenembed_feature_decoder(
     model, ae, feat_idx: int, node_type: str, layer: Optional[int] = None
 ):
@@ -218,7 +204,7 @@ def visualize_lens(
 
 
 def plot_lenses(model, ae, feat_idx: int, device: str, node_type: str, layer: Optional[int] = None):
-    fig, axs = plt.subplots(1, 3, figsize=(10, 6))
+    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
 
     visualize_lens(
         axs[0],
@@ -239,18 +225,7 @@ def plot_lenses(model, ae, feat_idx: int, device: str, node_type: str, layer: Op
         node_type,
         layer,
         cossim_logit_feature_decoder,
-        title="with unembed (cosine sim)",
-        device=device,
-    )
-    visualize_lens(
-        axs[2],
-        model,
-        ae,
-        feat_idx,
-        node_type,
-        layer,
-        logit_lens,
-        title="with unembed (logit lens)",
+        title="with unembed (DLA)",
         device=device,
     )
     fig.suptitle(f"Cosine sim of #feature {feat_idx} decoder")
