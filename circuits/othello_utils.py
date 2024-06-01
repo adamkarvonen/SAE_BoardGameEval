@@ -122,7 +122,7 @@ def board_state_to_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
     board_state_RR = t.tensor(board_state_RR, dtype=t.int8)
     board_state_RR *= flip  # Flip the board to standardize the player's perspective
 
-    lines_board_RRC = t.zeros(9, 8, 8, dtype=t.int8)
+    lines_board_RRC = t.zeros(8, 8, 9, dtype=t.int8)
 
     # Directions for movement in the format [dx, dy]
     eights = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]]
@@ -144,7 +144,7 @@ def board_state_to_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
 
                 # Check if the line ends with the player's piece (-1)
                 if 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == -1 and found_opponent:
-                    lines_board_RRC[direction_idx, r, c] = 1
+                    lines_board_RRC[r, c, direction_idx] = 1
 
     return lines_board_RRC
 

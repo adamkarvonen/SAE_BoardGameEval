@@ -102,11 +102,11 @@ def test_board_to_mine_lines_state():
 
     # print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
 
-    expected_lines = [(4, 2, 2), (5, 2, 4), (3, 4, 2)]
+    expected_lines = [(2, 2, 4), (2, 4, 5), (4, 2, 3)]
 
     for expected_line in expected_lines:
-        v, r, c = expected_line
-        assert boards_state_stack[0][move_of_interest][v][r][c].item() == 1
+        r, c, v = expected_line
+        assert boards_state_stack[0][move_of_interest][r][c][v].item() == 1
     assert boards_state_stack[0][move_of_interest].sum().item() == len(expected_lines)
 
 
@@ -118,10 +118,11 @@ def test_board_to_yours_lines_state():
     move_of_interest = 0
 
     # print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
+    # print(boards_state_stack[0][move_of_interest])
 
-    expected_lines = [(7, 4, 5), (1, 5, 4), (8, 5, 5)]
+    expected_lines = [(4, 5, 7), (5, 4, 1), (5, 5, 8)]
 
     for expected_line in expected_lines:
-        v, r, c = expected_line
-        assert boards_state_stack[0][move_of_interest][v][r][c].item() == 1
+        r, c, v = expected_line
+        assert boards_state_stack[0][move_of_interest][r][c][v].item() == 1
     assert boards_state_stack[0][move_of_interest].sum().item() == len(expected_lines)
