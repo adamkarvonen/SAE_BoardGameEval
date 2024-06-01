@@ -5,6 +5,7 @@ import gc
 from IPython.display import HTML, display
 from tqdm import trange
 from typing import Optional
+from circuits.othello_engine_utils import OthelloBoardState, itos, to_board_label
 
 
 def convert_othello_dataset_sample_to_board(sample_i, move_idx=None):
@@ -187,6 +188,23 @@ def visualize_vocab(ax, vocab_vals, device, title=""):
     ax.set_xticklabels(["A", "B", "C", "D", "E", "F", "G", "H"])
     ax.set_title(title)
 
+def visualize_board_from_tensor(ax, board_tensor, title="",):
+    ll_board = board_tensor.view(8, 8)
+    cmap = "Blues"
+    vmin = 0
+    vmax = board_tensor.abs().max().item()
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    im = ax.imshow(ll_board.cpu().detach().numpy(), cmap=cmap, norm=norm)
+
+    # Specify the number of ticks for the colorbar using linspace
+    # ticks = t.linspace(vmin, vmax, 4)
+    cbar = plt.colorbar(
+        plt.cm.ScalarMappable(cmap=cmap, norm=norm), ax=ax, fraction=0.046, pad=0.04
+    )
+    # cbar.ax.set_yticklabels([f"{tick:.2f}" for tick in ticks])
+    ax.set_xticks(range(8))
+    ax.set_xticklabels(["A", "B", "C", "D", "E", "F", "G", "H"])
+    ax.set_title(title)
 
 def visualize_lens(
     ax,
@@ -525,3 +543,44 @@ def plot_top_k_games(
         )
         fig.suptitle(f"Top {i+1} {sort_metric} game for feature #{feat_idx}")
         plt.show()
+
+
+# Play through a game
+class BoardPlayer():
+    def __init__(self, game):
+        self.game_i = game.cpu().numpy()
+        self.game_s = [itos[move] for move in self.game_i]
+        self.board = OthelloBoardState()
+        self.cur_idx = 0
+
+    def _display(self):
+        cur_move_highlighted = t.zeros(64)
+        cur_move_highlighted[self.game_s[self.cur_idx]] = 1
+        cur_move_highlighted = cur_move_highlighted.view(8,8)
+        highlight_seq = t.zeros(59)
+        highlight_seq[self.cur_idx] = 1
+
+        display(visualize_game_seq(self.game_i, highlight_seq, 2, prefix="Current move: <br>"))
+        fig, ax = plt.subplots()
+        move_label = to_board_label(self.game_s[self.cur_idx])
+        plot_othello_board_highlighted(ax, self.board.state, bg_board_RR=cur_move_highlighted, title=f'Move {self.cur_idx}: {move_label}')
+        plt.show()
+
+    def next(self):
+        if self.cur_idx < 59:
+            move = self.game_s[self.cur_idx]
+            self.board.umpire(move)
+            self._display()
+            self.cur_idx += 1
+        else:
+            print('Last move reached.')
+
+    def prev(self):
+        if self.cur_idx > 0:
+            self.board = OthelloBoardState()
+            for move in self.game_s[:self.cur_idx]:
+                self.board.umpire(move)
+            self._display()
+            self.cur_idx -= 1
+        else:
+            print('First move reached.')
