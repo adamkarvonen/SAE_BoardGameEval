@@ -37,7 +37,7 @@ def test_board_to_state():
     r = input[0][move_of_interest] // 8
     c = input[0][move_of_interest] % 8
 
-    # White just placed a piece on r, c
+    # Black just placed a piece on r, c
     assert torch.equal(
         boards_state_stack[0][0][r][c], torch.tensor([0, 0, 1], dtype=torch.int8, device=device)
     )
@@ -57,9 +57,17 @@ def test_board_to_mine_yours_state():
     r = input[0][move_of_interest] // 8
     c = input[0][move_of_interest] % 8
 
+    # For visualization
+    print(torch.argmax(boards_state_stack[0][0], dim=-1) - 1)
+
     # I just placed a piece on r, c
     assert torch.equal(
         boards_state_stack[0][0][r][c], torch.tensor([0, 0, 1], dtype=torch.int8, device=device)
+    )
+
+    # That piece wasn't flipped, so now it becomes your piece from the current perspective
+    assert torch.equal(
+        boards_state_stack[0][1][r][c], torch.tensor([1, 0, 0], dtype=torch.int8, device=device)
     )
 
     new_move_of_interest = 5
@@ -83,3 +91,37 @@ def test_board_to_valid_moves_state():
                 assert boards_state_stack[0][move_of_interest][i][j].item() == 1
             else:
                 assert boards_state_stack[0][move_of_interest][i][j].item() == 0
+
+
+def test_board_to_mine_lines_state():
+    input = [[19]]
+
+    boards_state_stack = othello_utils.games_batch_to_state_stack_lines_mine_BLRCC(input)
+
+    move_of_interest = 0
+
+    # print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
+
+    expected_lines = [(4, 2, 2), (5, 2, 4), (3, 4, 2)]
+
+    for expected_line in expected_lines:
+        v, r, c = expected_line
+        assert boards_state_stack[0][move_of_interest][v][r][c].item() == 1
+    assert boards_state_stack[0][move_of_interest].sum().item() == len(expected_lines)
+
+
+def test_board_to_yours_lines_state():
+    input = [[19]]
+
+    boards_state_stack = othello_utils.games_batch_to_state_stack_lines_yours_BLRCC(input)
+
+    move_of_interest = 0
+
+    # print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
+
+    expected_lines = [(7, 4, 5), (1, 5, 4), (8, 5, 5)]
+
+    for expected_line in expected_lines:
+        v, r, c = expected_line
+        assert boards_state_stack[0][move_of_interest][v][r][c].item() == 1
+    assert boards_state_stack[0][move_of_interest].sum().item() == len(expected_lines)
