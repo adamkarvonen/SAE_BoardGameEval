@@ -645,7 +645,7 @@ def get_recommended_custom_functions(othello: bool) -> list[Callable]:
             othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
             othello_utils.games_batch_to_valid_moves_BLRRC,
             othello_utils.games_batch_to_state_stack_lines_mine_BLRCC,
-            othello_utils.games_batch_to_state_stack_lines_yours_BLRCC,
+            # othello_utils.games_batch_to_state_stack_lines_yours_BLRCC,
         ]
     return custom_functions
 
