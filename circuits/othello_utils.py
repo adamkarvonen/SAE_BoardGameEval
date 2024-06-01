@@ -1,6 +1,8 @@
 import torch as t
 import torch.nn.functional as F
+from tqdm import tqdm
 from datasets import load_dataset
+
 from circuits.othello_engine_utils import (
     OthelloBoardState,
     stoi,
@@ -38,8 +40,10 @@ def board_state_to_RRC(board_state, flip: int = 1) -> t.Tensor:
 # TODO Remove duplicated logic from these functions
 def games_batch_to_state_stack_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
     """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
     game_stack = []
-    for game in batch_str_moves:
+    for game in iterable:
         if isinstance(game, t.Tensor):
             game = game.flatten()
 
@@ -56,8 +60,10 @@ def games_batch_to_state_stack_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
 
 def games_batch_to_valid_moves_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
     """Sequences of moves (dataset format) to state stack of valid moves"""
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
     game_stack = []
-    for game in batch_str_moves:
+    for game in iterable:
         if isinstance(game, t.Tensor):
             game = game.flatten()
 
@@ -77,8 +83,10 @@ def games_batch_to_valid_moves_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
 
 def games_batch_to_state_stack_mine_yours_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
     """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
     game_stack = []
-    for game in batch_str_moves:
+    for game in iterable:
         if isinstance(game, t.Tensor):
             game = game.flatten()
 
@@ -98,8 +106,10 @@ def games_batch_to_state_stack_mine_yours_BLRRC(batch_str_moves: list[int]) -> t
 
 def games_batch_to_state_stack_mine_yours_blank_mask_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
     """Sequences of moves (dataset format) to state stack (one-hot) of shape (seq_len, 8, 8, 3)"""
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
     game_stack = []
-    for game in batch_str_moves:
+    for game in iterable:
         if isinstance(game, t.Tensor):
             game = game.flatten()
 
@@ -149,10 +159,12 @@ def board_state_to_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
     return lines_board_RRC
 
 
-def games_batch_to_state_stack_lines_mine_BLRCC(batch_str_moves: list[int]) -> t.Tensor:
+def games_batch_to_state_stack_lines_mine_BLRCC(batch_str_moves: list[list[int]]) -> t.Tensor:
+
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
 
     game_stack = []
-    for game in batch_str_moves:
+    for game in iterable:
         if isinstance(game, t.Tensor):
             game = game.flatten()
 
