@@ -132,7 +132,7 @@ def board_state_to_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
     board_state_RR = t.tensor(board_state_RR, dtype=t.int8)
     board_state_RR *= flip  # Flip the board to standardize the player's perspective
 
-    lines_board_RRC = t.zeros(8, 8, 9, dtype=t.int8)
+    lines_board_RRC = t.zeros(8, 8, 8, dtype=t.int8)
 
     # Directions for movement in the format [dx, dy]
     eights = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]]
@@ -144,7 +144,6 @@ def board_state_to_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
 
             # Check each direction from 'eights'
             for direction_idx, (dx, dy) in enumerate(eights):
-                direction_idx += 1  # 0 is reserved for the blank space
                 x, y = r + dx, c + dy
                 found_opponent = False
                 while 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == 1:
@@ -155,6 +154,78 @@ def board_state_to_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
                 # Check if the line ends with the player's piece (-1)
                 if 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == -1 and found_opponent:
                     lines_board_RRC[r, c, direction_idx] = 1
+
+    return lines_board_RRC
+
+
+def board_state_to_length_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
+    board_state_RR = t.tensor(board_state_RR, dtype=t.int8)
+    board_state_RR *= flip  # Flip the board to standardize the player's perspective
+
+    max_length = 5
+
+    lines_board_RRC = t.zeros(8, 8, (max_length * 8), dtype=t.int8)
+
+    # Directions for movement in the format [dx, dy]
+    eights = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]]
+
+    for r in range(8):
+        for c in range(8):
+            if board_state_RR[r, c] != 0:
+                continue
+
+            # Check each direction from 'eights'
+            for direction_idx, (dx, dy) in enumerate(eights):
+
+                length = 1
+
+                x, y = r + dx, c + dy
+                found_opponent = False
+                while 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == 1:
+                    found_opponent = True
+                    x += dx
+                    y += dy
+                    length += 1
+
+                # Check if the line ends with the player's piece (-1)
+                if 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == -1 and found_opponent:
+                    length = min(length, max_length) - 1
+                    line_index = length * max_length + direction_idx
+                    lines_board_RRC[r, c, line_index] = 1
+
+    return lines_board_RRC
+
+
+def board_state_to_opponent_length_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
+    """In this case, we don't check that the end of the line ends with a `mine` piece."""
+    board_state_RR = t.tensor(board_state_RR, dtype=t.int8)
+    board_state_RR *= flip  # Flip the board to standardize the player's perspective
+
+    max_length = 5
+
+    lines_board_RRC = t.zeros(8, 8, (max_length * 8), dtype=t.int8)
+
+    # Directions for movement in the format [dx, dy]
+    eights = [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]]
+
+    for r in range(8):
+        for c in range(8):
+            if board_state_RR[r, c] != 0:
+                continue
+
+            # Check each direction from 'eights'
+            for direction_idx, (dx, dy) in enumerate(eights):
+                length = 1
+
+                x, y = r + dx, c + dy
+                while 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == 1:
+                    x += dx
+                    y += dy
+                    length += 1
+
+                length = min(length, max_length) - 1
+                line_index = length * max_length + direction_idx
+                lines_board_RRC[r, c, line_index] = 1
 
     return lines_board_RRC
 
@@ -176,7 +247,56 @@ def games_batch_to_state_stack_lines_mine_BLRCC(batch_str_moves: list[list[int]]
                 flip = -1
             board.umpire(move)
             one_hot = board_state_to_lines_RRC(board.state, flip)
-            one_hot[..., 0] = 0
+            states.append(one_hot)
+        states = t.stack(states, axis=0)
+        game_stack.append(states)
+    return t.stack(game_stack, axis=0)
+
+
+def games_batch_to_state_stack_length_lines_mine_BLRCC(
+    batch_str_moves: list[list[int]],
+) -> t.Tensor:
+
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
+    game_stack = []
+    for game in iterable:
+        if isinstance(game, t.Tensor):
+            game = game.flatten()
+
+        board = OthelloBoardState()
+        states = []
+        for i, move in enumerate(game):
+            flip = 1
+            if i % 2 == 1:
+                flip = -1
+            board.umpire(move)
+            one_hot = board_state_to_length_lines_RRC(board.state, flip)
+            states.append(one_hot)
+        states = t.stack(states, axis=0)
+        game_stack.append(states)
+    return t.stack(game_stack, axis=0)
+
+
+def games_batch_to_state_stack_opponent_length_lines_mine_BLRCC(
+    batch_str_moves: list[list[int]],
+) -> t.Tensor:
+
+    iterable = tqdm(batch_str_moves) if len(batch_str_moves) > 50 else batch_str_moves
+
+    game_stack = []
+    for game in iterable:
+        if isinstance(game, t.Tensor):
+            game = game.flatten()
+
+        board = OthelloBoardState()
+        states = []
+        for i, move in enumerate(game):
+            flip = 1
+            if i % 2 == 1:
+                flip = -1
+            board.umpire(move)
+            one_hot = board_state_to_opponent_length_lines_RRC(board.state, flip)
             states.append(one_hot)
         states = t.stack(states, axis=0)
         game_stack.append(states)
@@ -184,7 +304,8 @@ def games_batch_to_state_stack_lines_mine_BLRCC(batch_str_moves: list[list[int]]
 
 
 def games_batch_to_state_stack_lines_yours_BLRCC(batch_str_moves: list[int]) -> t.Tensor:
-    """Difference is in `if i % 2 == 0:` instead of `if i % 2 == 1:`"""
+    """Difference is in `if i % 2 == 0:` instead of `if i % 2 == 1:`
+    This function seems to be not required as it scores very poorly on board reconstruction"""
 
     game_stack = []
     for game in batch_str_moves:
@@ -199,7 +320,6 @@ def games_batch_to_state_stack_lines_yours_BLRCC(batch_str_moves: list[int]) -> 
                 flip = -1
             board.umpire(move)
             one_hot = board_state_to_lines_RRC(board.state, flip)
-            one_hot[..., 0] = 0
             states.append(one_hot)
         states = t.stack(states, axis=0)
         game_stack.append(states)

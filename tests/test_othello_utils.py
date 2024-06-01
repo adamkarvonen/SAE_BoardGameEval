@@ -100,9 +100,9 @@ def test_board_to_mine_lines_state():
 
     move_of_interest = 0
 
-    # print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
+    print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
 
-    expected_lines = [(2, 2, 4), (2, 4, 5), (4, 2, 3)]
+    expected_lines = [(2, 2, 3), (2, 4, 4), (4, 2, 2)]
 
     for expected_line in expected_lines:
         r, c, v = expected_line
@@ -120,7 +120,7 @@ def test_board_to_yours_lines_state():
     # print(torch.argmax(boards_state_stack[0][move_of_interest], dim=0))
     # print(boards_state_stack[0][move_of_interest])
 
-    expected_lines = [(4, 5, 7), (5, 4, 1), (5, 5, 8)]
+    expected_lines = [(4, 5, 6), (5, 4, 0), (5, 5, 7)]
 
     for expected_line in expected_lines:
         r, c, v = expected_line
