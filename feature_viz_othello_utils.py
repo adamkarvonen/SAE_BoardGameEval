@@ -188,11 +188,11 @@ def visualize_vocab(ax, vocab_vals, device, title=""):
     ax.set_xticklabels(["A", "B", "C", "D", "E", "F", "G", "H"])
     ax.set_title(title)
 
-def visualize_board_from_tensor(ax, board_tensor, title="",):
+def visualize_board_from_tensor(ax, board_tensor, title="", cmap='magma', vmax=None):
     ll_board = board_tensor.view(8, 8)
-    cmap = "Blues"
     vmin = 0
-    vmax = board_tensor.abs().max().item()
+    if vmax is None:
+        vmax = board_tensor.abs().max().item()
     norm = plt.Normalize(vmin=vmin, vmax=vmax)
     im = ax.imshow(ll_board.cpu().detach().numpy(), cmap=cmap, norm=norm)
 
