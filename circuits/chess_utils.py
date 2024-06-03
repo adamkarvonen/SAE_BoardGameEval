@@ -772,6 +772,38 @@ othello_valid_moves_config = Config(
     num_cols=8,
 )
 
+othello_mine_lines_config = Config(
+    min_val=0,
+    max_val=7,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_lines_mine_BLRCC,
+    num_rows=8,
+    num_cols=8,
+)
+
+othello_yours_lines_config = Config(
+    min_val=0,
+    max_val=7,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_lines_yours_BLRCC,
+    num_rows=8,
+    num_cols=8,
+)
+
+othello_length_lines_config = Config(
+    min_val=0,
+    max_val=39,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_length_lines_mine_BLRCC,
+    num_rows=8,
+    num_cols=8,
+)
+
+othello_opponent_length_lines_config = Config(
+    min_val=0,
+    max_val=39,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_opponent_length_lines_mine_BLRCC,
+    num_rows=8,
+    num_cols=8,
+)
+
 has_castling_rights_config = Config(
     min_val=0,
     max_val=1,
@@ -953,6 +985,10 @@ all_configs = [
     othello_mine_yours_config,
     othello_mine_yours_blank_mask_config,
     othello_valid_moves_config,
+    othello_mine_lines_config,
+    othello_yours_lines_config,
+    othello_length_lines_config,
+    othello_opponent_length_lines_config,
     has_specific_fork_config,
     has_any_fork_config,
     has_castling_rights_config,
