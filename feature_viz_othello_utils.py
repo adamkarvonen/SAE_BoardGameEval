@@ -188,8 +188,11 @@ def visualize_vocab(ax, vocab_vals, device, title=""):
     ax.set_xticklabels(["A", "B", "C", "D", "E", "F", "G", "H"])
     ax.set_title(title)
 
-def visualize_board_from_tensor(ax, board_tensor, title="", cmap='magma', vmax=None):
-    ll_board = board_tensor.view(8, 8)
+def visualize_board_from_tensor(ax, board_tensor, title="", cmap='magma', vmax=None, player=None):
+    if player is not None:
+        ll_board = board_tensor.view(8, 8, -1)[player]
+    else:
+        ll_board = board_tensor.view(8, 8)
     vmin = 0
     if vmax is None:
         vmax = board_tensor.abs().max().item()
