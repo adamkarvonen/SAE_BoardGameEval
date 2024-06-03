@@ -25,3 +25,8 @@ data.pkl
 .*.swp
 .*.swo
 circuits/processed_results/*
+circuits/othello_sae_trainer.py
+circuits/run_othello_sae_trainer.sh
+circuits/run_chess_sae_trainer.sh
+circuits/nohup.out
+circuits/chess_sae_trainer.py

@@ -162,7 +162,8 @@ def board_state_to_length_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
     board_state_RR = t.tensor(board_state_RR, dtype=t.int8)
     board_state_RR *= flip  # Flip the board to standardize the player's perspective
 
-    max_length = 5
+    max_length = 6
+    n_directions = 8
 
     lines_board_RRC = t.zeros(8, 8, (max_length * 8), dtype=t.int8)
 
@@ -177,20 +178,20 @@ def board_state_to_length_lines_RRC(board_state_RR, flip: int) -> t.Tensor:
             # Check each direction from 'eights'
             for direction_idx, (dx, dy) in enumerate(eights):
 
-                length = 1
+                length = 0
 
                 x, y = r + dx, c + dy
                 found_opponent = False
                 while 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == 1:
                     found_opponent = True
+                    length += 1
                     x += dx
                     y += dy
-                    length += 1
 
                 # Check if the line ends with the player's piece (-1)
                 if 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == -1 and found_opponent:
                     length = min(length, max_length) - 1
-                    line_index = length * max_length + direction_idx
+                    line_index = length * n_directions + direction_idx
                     lines_board_RRC[r, c, line_index] = 1
 
     return lines_board_RRC
@@ -201,7 +202,8 @@ def board_state_to_opponent_length_lines_RRC(board_state_RR, flip: int) -> t.Ten
     board_state_RR = t.tensor(board_state_RR, dtype=t.int8)
     board_state_RR *= flip  # Flip the board to standardize the player's perspective
 
-    max_length = 5
+    max_length = 6
+    n_directions = 8
 
     lines_board_RRC = t.zeros(8, 8, (max_length * 8), dtype=t.int8)
 
@@ -215,7 +217,7 @@ def board_state_to_opponent_length_lines_RRC(board_state_RR, flip: int) -> t.Ten
 
             # Check each direction from 'eights'
             for direction_idx, (dx, dy) in enumerate(eights):
-                length = 1
+                length = 0
 
                 x, y = r + dx, c + dy
                 while 0 <= x < 8 and 0 <= y < 8 and board_state_RR[x, y] == 1:
@@ -224,7 +226,7 @@ def board_state_to_opponent_length_lines_RRC(board_state_RR, flip: int) -> t.Ten
                     length += 1
 
                 length = min(length, max_length) - 1
-                line_index = length * max_length + direction_idx
+                line_index = length * n_directions + direction_idx
                 lines_board_RRC[r, c, line_index] = 1
 
     return lines_board_RRC
