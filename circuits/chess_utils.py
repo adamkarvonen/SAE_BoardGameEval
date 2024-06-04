@@ -790,7 +790,7 @@ othello_yours_lines_config = Config(
 
 othello_length_lines_config = Config(
     min_val=0,
-    max_val=39,
+    max_val=47,
     custom_board_state_function=othello_utils.games_batch_to_state_stack_length_lines_mine_BLRCC,
     num_rows=8,
     num_cols=8,
@@ -798,7 +798,7 @@ othello_length_lines_config = Config(
 
 othello_opponent_length_lines_config = Config(
     min_val=0,
-    max_val=39,
+    max_val=47,
     custom_board_state_function=othello_utils.games_batch_to_state_stack_opponent_length_lines_mine_BLRCC,
     num_rows=8,
     num_cols=8,

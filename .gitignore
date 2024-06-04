@@ -30,3 +30,5 @@ circuits/run_othello_sae_trainer.sh
 circuits/run_chess_sae_trainer.sh
 circuits/nohup.out
 circuits/chess_sae_trainer.py
+circuits/full_pipeline_can*
+circuits/*.pkl
