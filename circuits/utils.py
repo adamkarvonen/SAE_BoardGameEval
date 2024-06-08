@@ -12,6 +12,7 @@ from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 from transformer_lens import HookedTransformer
 from enum import Enum
+from typing import Optional
 
 from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.chess_utils import encode_string
@@ -90,7 +91,7 @@ def get_mlp_activations_submodule(model_name: str, layer: int, model: NNsight) -
     raise ValueError("Model not found.")
 
 
-def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
+def get_resid_post_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         return model.blocks[layer].hook_resid_post
     if model_name in [
@@ -100,6 +101,17 @@ def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     ]:
         return model.transformer.h[layer]  # residual stream after the layer
     raise ValueError("Model not found.")
+
+
+def get_submodule(
+    model_name: str, layer: int, model: NNsight, submodule_type: Optional[SubmoduleType] = None
+) -> Any:
+    if submodule_type is None or submodule_type == SubmoduleType.resid_post:
+        return get_resid_post_submodule(model_name, layer, model)
+    elif submodule_type == SubmoduleType.mlp_act:
+        return get_mlp_activations_submodule(model_name, layer, model)
+    else:
+        raise ValueError("submodule_type not recognized")
 
 
 def get_identity_autoencoder(config: dict) -> IdentityDict:
@@ -194,12 +206,10 @@ def get_ae_bundle(
 
     if submodule_type == submodule_type.resid_post:
         assert activation_dim == 512
-        submodule = get_submodule(model_name, layer, model)
     elif submodule_type == submodule_type.mlp_act:
         assert activation_dim == 512 * 4
-        submodule = get_mlp_activations_submodule(model_name, layer, model)
-    else:
-        raise ValueError("submodule_type not recognized")
+
+    submodule = get_submodule(model_name, layer, model, submodule_type)
 
     context_length = config["buffer"]["ctx_len"]
 
