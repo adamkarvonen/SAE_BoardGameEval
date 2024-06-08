@@ -1104,14 +1104,14 @@ def create_state_stack(
                 board.push_san(move.split(".")[1])
             else:
                 board.push_san(move)
-
-            for custom_fn in custom_board_to_state_fns:
-                func_name = custom_fn.__name__
-                initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
         except:
             # because all games are truncated to a length, often the last move is partial and invalid
             # so we don't need to log this, as it will happen on most games
             break
+
+        for custom_fn in custom_board_to_state_fns:
+            func_name = custom_fn.__name__
+            initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
 
     # if count % 100 == 0:
     #     pretty_print_state_stack(state)
