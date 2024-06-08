@@ -1,6 +1,7 @@
 from tqdm import tqdm
 import pickle
 import torch
+import torch.nn.functional as F
 import einops
 from typing import Callable, Optional
 import math
@@ -83,6 +84,31 @@ def initialized_constructed_boards_dict(
     return constructed_boards
 
 
+def create_max_active_mask(active_indices_TFBL: torch.Tensor) -> torch.Tensor:
+
+    total_nonzero_acts = active_indices_TFBL[0].sum()
+    T, f, B, L = active_indices_TFBL.shape
+
+    active_indices_FBL = einops.reduce(active_indices_TFBL, "T F B L -> F B L", "sum") - 1
+    zeros_indices_FBL = active_indices_FBL == -1
+    zeros_indices_TFBL = einops.repeat(zeros_indices_FBL, "F B L -> T F B L", T=T)
+    active_indices_FBL = active_indices_FBL.clamp(min=0)
+
+    max_indices_FBLT = F.one_hot(active_indices_FBL, num_classes=T)
+    max_indices_TFBL = einops.rearrange(max_indices_FBLT, "F B L T -> T F B L")
+    max_indices_TFBL = max_indices_TFBL * ~zeros_indices_TFBL
+
+    max_acts = max_indices_TFBL.sum()
+
+    assert max_acts == total_nonzero_acts, f"max_acts: {max_acts}, total_acts: {total_nonzero_acts}"
+
+    # print(
+    #     f"Total activations: {total_nonzero_acts}, Max activations: {max_acts}, Total squares: {total_acts}, Max squares: {nonzero_max_acts}"
+    # )
+
+    return max_indices_TFBL
+
+
 def aggregate_feature_labels(
     results: dict,
     feature_labels: dict,
@@ -95,6 +121,9 @@ def aggregate_feature_labels(
 ) -> tuple[dict, dict[str, torch.Tensor]]:
     active_indices_TFBL = activations_FBL > thresholds_TF11
     active_indices_TFBL111 = einops.repeat(active_indices_TFBL, "T F B L -> T F B L 1 1 1")
+
+    max_indices_TFBL = create_max_active_mask(active_indices_TFBL)
+    max_indices_TFBL111 = einops.repeat(max_indices_TFBL, "T F B L -> T F B L 1 1 1")
 
     active_counts_TF = einops.reduce(active_indices_TFBL, "T F B L -> T F", "sum")
     off_counts_TF = einops.reduce(~active_indices_TFBL, "T F B L -> T F", "sum")
@@ -122,6 +151,14 @@ def aggregate_feature_labels(
             "T F B L R1 R2 C -> T B L R1 R2 C",
             "sum",
         )
+
+        max_boards_sum_BLRRC = einops.reduce(
+            feature_labels_TFBLRRC * max_indices_TFBL111,
+            "T F B L R1 R2 C -> B L R1 R2 C",
+            "sum",
+        )
+
+        active_boards_sum_TBLRRC[-1] = max_boards_sum_BLRRC
 
         additive_boards[custom_function.__name__] = active_boards_sum_TBLRRC
 
