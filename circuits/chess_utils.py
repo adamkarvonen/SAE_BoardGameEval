@@ -282,6 +282,7 @@ def board_to_specific_fork(
     else:
         raise ValueError("Perspective must be 'mine' or 'other'")
 
+    high_value_targets = 0
     # Loop through all pieces to find the knights of the given color
     for square in board.pieces(attacker_piece, color):
         if board.is_pinned(color, square):
@@ -289,7 +290,6 @@ def board_to_specific_fork(
             continue
 
         attacks = board.attacks(square)
-        high_value_targets = 0
 
         # Check each attack square to see if it's occupied by a high-value enemy piece
         for attack_square in attacks:
