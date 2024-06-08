@@ -109,6 +109,31 @@ def create_max_active_mask(active_indices_TFBL: torch.Tensor) -> torch.Tensor:
     return max_indices_TFBL
 
 
+def max_activation_mask_2(
+    feature_labels_TFBLRRC: torch.Tensor, active_indices_TFBL111: torch.Tensor
+) -> torch.Tensor:
+    lookup_TFBLRRC = feature_labels_TFBLRRC * active_indices_TFBL111
+
+    lookup_TFBL = einops.reduce(lookup_TFBLRRC, "T F B L R1 R2 C -> T F B L", "sum")
+    lookup_FBL = einops.reduce(lookup_TFBL, "T F B L -> F B L", "sum")
+    zeros_FBL = lookup_FBL == 0
+    zeros_TFBL = einops.repeat(zeros_FBL, "F B L -> T F B L", T=lookup_TFBL.shape[0])
+
+    max_indices_FBL = torch.argmax(lookup_TFBL, dim=0)
+    max_indices_FBLT = F.one_hot(max_indices_FBL, num_classes=lookup_TFBL.shape[0])
+    max_indices_TFBL = einops.rearrange(max_indices_FBLT, "F B L T -> T F B L")
+    max_indices_TFBL = max_indices_TFBL * ~zeros_TFBL
+    max_indices_TFBL111 = einops.repeat(max_indices_TFBL, "T F B L -> T F B L 1 1 1")
+
+    max_boards_sum_BLRRC = einops.reduce(
+        feature_labels_TFBLRRC * max_indices_TFBL111,
+        "T F B L R1 R2 C -> B L R1 R2 C",
+        "sum",
+    )
+
+    return max_boards_sum_BLRRC
+
+
 def aggregate_feature_labels(
     results: dict,
     feature_labels: dict,
