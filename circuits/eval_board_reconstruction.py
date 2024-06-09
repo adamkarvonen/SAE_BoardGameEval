@@ -84,27 +84,69 @@ def initialized_constructed_boards_dict(
     return constructed_boards
 
 
-def create_max_active_mask(active_indices_TFBL: torch.Tensor) -> torch.Tensor:
+# def create_max_active_mask(
+#     active_indices_TFBL: torch.Tensor,  # feature_labels_TFRRC: torch.Tensor
+# ) -> torch.Tensor:
 
+#     total_nonzero_acts = active_indices_TFBL[0].sum()
+#     T, f, B, L = active_indices_TFBL.shape
+
+#     active_indices_FBL = einops.reduce(active_indices_TFBL, "T F B L -> F B L", "sum") - 1
+#     zeros_indices_FBL = active_indices_FBL == -1
+#     zeros_indices_TFBL = einops.repeat(zeros_indices_FBL, "F B L -> T F B L", T=T)
+#     active_indices_FBL = active_indices_FBL.clamp(min=0)
+
+#     max_indices_FBLT = F.one_hot(active_indices_FBL, num_classes=T)
+#     max_indices_TFBL = einops.rearrange(max_indices_FBLT, "F B L T -> T F B L")
+#     max_indices_TFBL = max_indices_TFBL * ~zeros_indices_TFBL
+
+#     max_acts = max_indices_TFBL.sum()
+
+#     assert max_acts == total_nonzero_acts, f"max_acts: {max_acts}, total_acts: {total_nonzero_acts}"
+
+#     # print(
+#     #     f"Total activations: {total_nonzero_acts}, Max activations: {max_acts}, Total squares: {total_acts}, Max squares: {nonzero_max_acts}"
+#     # )
+
+#     return max_indices_TFBL
+
+
+def create_max_active_mask(
+    active_indices_TFBL: torch.Tensor, feature_labels_TFRRC: torch.Tensor
+) -> torch.Tensor:
+    # Calculate the total activations for assertion later
     total_nonzero_acts = active_indices_TFBL[0].sum()
-    T, f, B, L = active_indices_TFBL.shape
 
-    active_indices_FBL = einops.reduce(active_indices_TFBL, "T F B L -> F B L", "sum") - 1
-    zeros_indices_FBL = active_indices_FBL == -1
-    zeros_indices_TFBL = einops.repeat(zeros_indices_FBL, "F B L -> T F B L", T=T)
-    active_indices_FBL = active_indices_FBL.clamp(min=0)
+    # Generate a range tensor that increments along the T dimension
+    T = active_indices_TFBL.shape[0]
+    range_tensor_T111 = torch.arange(T, device=active_indices_TFBL.device)[:, None, None, None]
 
-    max_indices_FBLT = F.one_hot(active_indices_FBL, num_classes=T)
+    # Multiply active indices by the range to mark the indices with their actual time step values
+    weighted_active_indices_TFBL = active_indices_TFBL.float() * range_tensor_T111
+
+    feature_square_counts_TF = einops.reduce(feature_labels_TFRRC, "T F R1 R2 C -> T F", "sum")
+    # Broadcast feature_square_counts_TF to match the shape of weighted_active_indices_TFBL
+    feature_square_counts_TF11 = einops.repeat(feature_square_counts_TF, "T F -> T F 1 1")
+
+    # Mask out the weighted indices where the corresponding feature count is zero
+    mask_TFBL = feature_square_counts_TF11 > 0
+    weighted_active_indices_TFBL = weighted_active_indices_TFBL * mask_TFBL
+
+    # Use argmax to find the last time step index that was active (last occurrence of 1)
+    max_indices_FBL = torch.argmax(weighted_active_indices_TFBL, dim=0)
+
+    # Convert to one-hot encoding across the T dimension
+    max_indices_FBLT = torch.nn.functional.one_hot(max_indices_FBL, num_classes=T)
     max_indices_TFBL = einops.rearrange(max_indices_FBLT, "F B L T -> T F B L")
-    max_indices_TFBL = max_indices_TFBL * ~zeros_indices_TFBL
 
-    max_acts = max_indices_TFBL.sum()
+    # Ensure that only the places with at least one activation across T are considered
+    valid_activations_FBL = einops.reduce(active_indices_TFBL, "T F B L -> F B L", "sum") > 0
+    max_indices_TFBL = max_indices_TFBL * einops.repeat(
+        valid_activations_FBL, "F B L -> T F B L", T=T
+    )
 
-    assert max_acts == total_nonzero_acts, f"max_acts: {max_acts}, total_acts: {total_nonzero_acts}"
-
-    # print(
-    #     f"Total activations: {total_nonzero_acts}, Max activations: {max_acts}, Total squares: {total_acts}, Max squares: {nonzero_max_acts}"
-    # )
+    # Ensure the sum of the resulting mask is equal to the total number of nonzero activations
+    assert max_indices_TFBL.sum() == total_nonzero_acts, "Mismatch in activation counts!"
 
     return max_indices_TFBL
 
@@ -147,9 +189,6 @@ def aggregate_feature_labels(
     active_indices_TFBL = activations_FBL > thresholds_TF11
     active_indices_TFBL111 = einops.repeat(active_indices_TFBL, "T F B L -> T F B L 1 1 1")
 
-    max_indices_TFBL = create_max_active_mask(active_indices_TFBL)
-    max_indices_TFBL111 = einops.repeat(max_indices_TFBL, "T F B L -> T F B L 1 1 1")
-
     active_counts_TF = einops.reduce(active_indices_TFBL, "T F B L -> T F", "sum")
     off_counts_TF = einops.reduce(~active_indices_TFBL, "T F B L -> T F", "sum")
 
@@ -176,6 +215,9 @@ def aggregate_feature_labels(
             "T F B L R1 R2 C -> T B L R1 R2 C",
             "sum",
         )
+
+        max_indices_TFBL = create_max_active_mask(active_indices_TFBL, feature_labels_TFRRC)
+        max_indices_TFBL111 = einops.repeat(max_indices_TFBL, "T F B L -> T F B L 1 1 1")
 
         max_boards_sum_BLRRC = einops.reduce(
             feature_labels_TFBLRRC * max_indices_TFBL111,
