@@ -347,6 +347,7 @@ def analyze_sae_groups(
                     batch_size=config.batch_size,
                     device=device,
                     data=utils.to_device(train_data.copy(), device),
+                    thresholds_T=config.f1_analysis_thresholds,
                     indexing_function=indexing_function,
                     othello=othello,
                     save_results=config.save_results,

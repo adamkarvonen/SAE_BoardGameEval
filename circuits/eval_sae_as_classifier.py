@@ -415,6 +415,7 @@ def aggregate_statistics(
     batch_size: int,
     device: torch.device,
     data: dict,
+    thresholds_T: torch.Tensor,
     indexing_function: Optional[Callable] = None,
     othello: bool = False,
     save_results: bool = True,
@@ -462,8 +463,7 @@ def aggregate_statistics(
     # We round up to ensure we don't ignore the remainder of features
     num_feature_iters = math.ceil(num_features / feature_batch_size)
 
-    thresholds_T = torch.arange(0.0, 1.1, 0.1).to(device)
-    thresholds_TF11 = einops.repeat(thresholds_T, "T -> T F 1 1", F=num_features)
+    thresholds_TF11 = einops.repeat(thresholds_T, "T -> T F 1 1", F=num_features).to(device)
     max_activations_1F11 = einops.repeat(max_activations_f, "F -> 1 F 1 1")
     thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
