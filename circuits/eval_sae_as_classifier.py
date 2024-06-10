@@ -5,41 +5,20 @@ import einops
 from datasets import load_dataset
 from typing import Callable, Optional
 import math
-import os
 import itertools
 import json
-import time
 
 from circuits.utils import (
     get_ae_bundle,
     collect_activations_batch,
-    get_model_activations,
-    get_feature_activations_batch,
     get_nested_folders,
     get_firing_features,
     to_device,
     AutoEncoderBundle,
-    SubmoduleType,
 )
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
 import circuits.othello_engine_utils as othello_engine_utils
-
-from circuits.dictionary_learning.evaluation import evaluate
-
-from IPython import embed
-
-# Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
-# F  = features and minibatch size depending on the context (maybe this is stupid)
-# B = batch_size
-# L = seq length (context length)
-# T = thresholds
-# R = rows (or cols)
-# C = classes for one hot encoding
-#
-# (rangell): feel free to change these if it doesn't make sense or fall in line with the spirit of the key
-# D = activation dimension
-# A = all (as opposed to batch B)
 
 
 def print_tensor_memory_usage(tensor):
@@ -74,40 +53,40 @@ def construct_chess_dataset(
 
     meta = chess_utils.load_chess_meta()
 
-    pgn_strings = []
-    encoded_inputs = []
+    pgn_strings_bL = []
+    encoded_inputs_bL = []
     for i, example in enumerate(dataset[split]["text"]):
         if i >= n_inputs:
             break
         pgn_string = example[:max_str_length]
-        pgn_strings.append(pgn_string)
+        pgn_strings_bL.append(pgn_string)
         encoded_input = chess_utils.encode_string(meta, pgn_string)
-        encoded_inputs.append(encoded_input)
+        encoded_inputs_bL.append(encoded_input)
 
     data = {}
-    data["decoded_inputs"] = pgn_strings
-    data["encoded_inputs"] = encoded_inputs
+    data["decoded_inputs"] = pgn_strings_bL
+    data["encoded_inputs"] = encoded_inputs_bL
 
     if not precompute_dataset:
         return data
 
-    state_stack_dict_BLRR = chess_utils.create_state_stacks(
-        pgn_strings, custom_functions, device, show_progress=True
+    state_stack_dict_bLRR = chess_utils.create_state_stacks(
+        pgn_strings_bL, custom_functions, device, show_progress=True
     )
 
-    for func_name in state_stack_dict_BLRR:
+    for func_name in state_stack_dict_bLRR:
         config = chess_utils.config_lookup[func_name]
-        state_stack_BLRR = state_stack_dict_BLRR[func_name]
+        state_stack_bLRR = state_stack_dict_bLRR[func_name]
 
-        assert state_stack_BLRR.shape[0] == len(pgn_strings)
-        assert state_stack_BLRR.shape[1] == max_str_length
+        assert state_stack_bLRR.shape[0] == len(pgn_strings_bL)
+        assert state_stack_bLRR.shape[1] == max_str_length
 
-        one_hot_BLRRC = chess_utils.state_stack_to_one_hot(config, device, state_stack_BLRR)
+        one_hot_bLRRC = chess_utils.state_stack_to_one_hot(config, device, state_stack_bLRR)
 
         print(func_name)
-        print_tensor_memory_usage(one_hot_BLRRC)
+        print_tensor_memory_usage(one_hot_bLRRC)
 
-        data[func_name] = one_hot_BLRRC
+        data[func_name] = one_hot_bLRRC
 
     return data
 
@@ -121,19 +100,19 @@ def construct_othello_dataset(
     precompute_dataset: bool = True,
 ) -> dict:
     dataset = load_dataset("adamkarvonen/othello_45MB_games", streaming=False)
-    encoded_othello_inputs = []
-    decoded_othello_inputs = []
+    encoded_othello_inputs_bL = []
+    decoded_othello_inputs_bL = []
     for i, example in enumerate(dataset[split]):
         if i >= n_inputs:
             break
         encoded_input = example["tokens"][:max_str_length]
         decoded_input = othello_engine_utils.to_string(encoded_input)
-        encoded_othello_inputs.append(encoded_input)
-        decoded_othello_inputs.append(decoded_input)
+        encoded_othello_inputs_bL.append(encoded_input)
+        decoded_othello_inputs_bL.append(decoded_input)
 
     data = {}
-    data["encoded_inputs"] = encoded_othello_inputs
-    data["decoded_inputs"] = decoded_othello_inputs
+    data["encoded_inputs"] = encoded_othello_inputs_bL
+    data["decoded_inputs"] = decoded_othello_inputs_bL
 
     if not precompute_dataset:
         return data
@@ -141,7 +120,7 @@ def construct_othello_dataset(
     for custom_function in custom_functions:
         print(f"Precomputing {custom_function.__name__}...")
         func_name = custom_function.__name__
-        data[func_name] = custom_function(decoded_othello_inputs)
+        data[func_name] = custom_function(decoded_othello_inputs_bL)
 
     return data
 
@@ -304,7 +283,7 @@ def normalize_tracker(
 
 # TODO Write a unit test for this function
 def apply_indexing_function(
-    pgn_strings: list[str],
+    pgn_strings_bL: list[str],
     activations_FBL: torch.Tensor,
     batch_data: dict[str, torch.Tensor],
     device: torch.device,
@@ -316,7 +295,7 @@ def apply_indexing_function(
     max_indices = 20
 
     custom_indices = []
-    for pgn in pgn_strings:
+    for pgn in pgn_strings_bL:
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
@@ -341,7 +320,7 @@ def apply_indexing_function(
 
 
 def compute_custom_indices(
-    pgn_strings: list[str],
+    pgn_strings_bL: list[str],
     indexing_function: Callable,
     num_active_features: int,
     device: str,
@@ -350,7 +329,7 @@ def compute_custom_indices(
     max_indices = 20
 
     custom_indices = []
-    for pgn in pgn_strings:
+    for pgn in pgn_strings_bL:
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
@@ -401,12 +380,12 @@ def prep_data_ae_buffer_and_model(
             continue
         data[key] = data[key].to(device)
 
-    pgn_strings = data["decoded_inputs"]
-    encoded_inputs = data["encoded_inputs"]
+    pgn_strings_bL = data["decoded_inputs"]
+    encoded_inputs_bL = data["encoded_inputs"]
     del data["decoded_inputs"]
     del data["encoded_inputs"]
 
-    activation_buffer_data = iter(encoded_inputs)
+    activation_buffer_data = iter(encoded_inputs_bL)
     n_ctxs = min(512, n_inputs)
 
     ae_bundle = get_ae_bundle(
@@ -419,7 +398,7 @@ def prep_data_ae_buffer_and_model(
     )
     ae_bundle.ae = ae_bundle.ae.to(device)
 
-    return data, ae_bundle, pgn_strings, encoded_inputs
+    return data, ae_bundle, pgn_strings_bL, encoded_inputs_bL
 
 
 def get_output_location(
@@ -450,7 +429,7 @@ def aggregate_statistics(
     feature_batch_size = batch_size
     indexing_function_name = get_indexing_function_name(indexing_function)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = prep_data_ae_buffer_and_model(
+    data, ae_bundle, pgn_strings_bL, encoded_inputs_bL = prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
         data,
@@ -461,22 +440,22 @@ def aggregate_statistics(
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
 
     torch.manual_seed(0)  # For reproducibility
-    alive_features_F, max_activations_F = get_firing_features(
+    alive_features_f, max_activations_f = get_firing_features(
         ae_bundle, firing_rate_n_inputs, batch_size, device
     )
     ae_bundle.buffer = None
 
     if indexing_function is not None:
         custom_indices_AI = compute_custom_indices(
-            pgn_strings, indexing_function, alive_features_F.shape[0], device
+            pgn_strings_bL, indexing_function, alive_features_f.shape[0], device
         )
 
-    num_features = len(alive_features_F)
+    num_features = len(alive_features_f)
     print(
         f"Out of {ae_bundle.dictionary_size} features, on {firing_rate_n_inputs} activations, {num_features} are alive."
     )
 
-    assert len(pgn_strings) >= n_inputs
+    assert len(pgn_strings_bL) >= n_inputs
     assert n_inputs % batch_size == 0
 
     n_iters = n_inputs // batch_size
@@ -485,15 +464,15 @@ def aggregate_statistics(
 
     thresholds_T = torch.arange(0.0, 1.1, 0.1).to(device)
     thresholds_TF11 = einops.repeat(thresholds_T, "T -> T F 1 1", F=num_features)
-    max_activations_1F11 = einops.repeat(max_activations_F, "F -> 1 F 1 1")
+    max_activations_1F11 = einops.repeat(max_activations_f, "F -> 1 F 1 1")
     thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
-    results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_F, device)
+    results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_f, device)
 
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
-        pgn_strings_BL = pgn_strings[start:end]
+        pgn_strings_BL = pgn_strings_bL[start:end]
         batch_data = get_data_batch(
             data,
             pgn_strings_BL,
@@ -505,15 +484,15 @@ def aggregate_statistics(
             othello=othello,
         )
 
-        encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
-        all_activations_FBL, tokens = collect_activations_batch(
-            ae_bundle, encoded_inputs_BL, alive_features_F
+        encoded_inputs_BL = torch.tensor(encoded_inputs_bL[start:end]).to(device)
+        all_activations_fBL, tokens = collect_activations_batch(
+            ae_bundle, encoded_inputs_BL, alive_features_f
         )
 
         if indexing_function is not None:
             custom_indices_BI = custom_indices_AI[start:end]
-            all_activations_FBL, batch_data = filter_data_by_custom_indices(
-                all_activations_FBL, batch_data, custom_indices_BI, device
+            all_activations_fBL, batch_data = filter_data_by_custom_indices(
+                all_activations_fBL, batch_data, custom_indices_BI, device
             )
 
         results = update_all_tracker(results, custom_functions, batch_data, device)
@@ -523,11 +502,7 @@ def aggregate_statistics(
             f_end = min((feature + 1) * feature_batch_size, num_features)
             f_batch_size = f_end - f_start
 
-            activations_FBL = all_activations_FBL[
-                f_start:f_end
-            ]  # NOTE: Now F == feature_batch_size
-            # Maybe that's stupid and inconsistent and I should use a new letter for annotations
-            # I'll roll with it for now
+            activations_FBL = all_activations_fBL[f_start:f_end]
 
             results = aggregate_batch_statistics(
                 results,

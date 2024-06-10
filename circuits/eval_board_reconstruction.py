@@ -1,7 +1,6 @@
 from tqdm import tqdm
 import pickle
 import torch
-import torch.nn.functional as F
 import einops
 from typing import Callable, Optional
 import math
@@ -9,13 +8,10 @@ import os
 
 from circuits.utils import (
     collect_activations_batch,
-    get_nested_folders,
     to_device,
-    SubmoduleType,
 )
 import circuits.eval_sae_as_classifier as eval_sae
 import circuits.chess_utils as chess_utils
-import circuits.analysis as analysis
 
 
 def get_all_feature_label_file_names(folder_name: str) -> list[str]:
@@ -412,7 +408,7 @@ def test_board_reconstructions(
     torch.set_grad_enabled(False)
     feature_batch_size = batch_size
 
-    data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
+    data, ae_bundle, pgn_strings_bL, encoded_inputs_bL = eval_sae.prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
         data,
@@ -421,9 +417,9 @@ def test_board_reconstructions(
         include_buffer=False,
     )
 
-    thresholds_TF11 = feature_labels["thresholds"].to(device)
-    alive_features_F = feature_labels["alive_features"].to(device)
-    num_features = len(alive_features_F)
+    thresholds_Tf11 = feature_labels["thresholds"].to(device)
+    alive_features_f = feature_labels["alive_features"].to(device)
+    num_features = len(alive_features_f)
     indexing_function = None
 
     if feature_labels["indexing_function"] in chess_utils.supported_indexing_functions:
@@ -439,7 +435,7 @@ def test_board_reconstructions(
             custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
 
     results = initialize_reconstruction_dict(
-        custom_functions, thresholds_TF11.shape[0], alive_features_F, device
+        custom_functions, thresholds_Tf11.shape[0], alive_features_f, device
     )
 
     n_iters = n_inputs // batch_size
@@ -449,8 +445,8 @@ def test_board_reconstructions(
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
-        pgn_strings_BL = pgn_strings[start:end]
-        encoded_inputs_BL = encoded_inputs[start:end]
+        pgn_strings_BL = pgn_strings_bL[start:end]
+        encoded_inputs_BL = encoded_inputs_bL[start:end]
         encoded_inputs_BL = torch.tensor(encoded_inputs_BL).to(device)
 
         batch_data = eval_sae.get_data_batch(
@@ -464,17 +460,21 @@ def test_board_reconstructions(
             othello=othello,
         )
 
-        all_activations_FBL, encoded_token_inputs = collect_activations_batch(
-            ae_bundle, encoded_inputs_BL, alive_features_F
+        all_activations_fBL, encoded_token_inputs = collect_activations_batch(
+            ae_bundle, encoded_inputs_BL, alive_features_f
         )
 
         if indexing_function is not None:
-            all_activations_FBL, batch_data = eval_sae.apply_indexing_function(
-                pgn_strings[start:end], all_activations_FBL, batch_data, device, indexing_function
+            all_activations_fBL, batch_data = eval_sae.apply_indexing_function(
+                pgn_strings_bL[start:end],
+                all_activations_fBL,
+                batch_data,
+                device,
+                indexing_function,
             )
 
         constructed_boards = initialized_constructed_boards_dict(
-            custom_functions, batch_data, thresholds_TF11, device
+            custom_functions, batch_data, thresholds_Tf11, device
         )
 
         # For thousands of features, this would be many GB of memory. So, we minibatch.
@@ -483,16 +483,14 @@ def test_board_reconstructions(
             f_end = min((feature + 1) * feature_batch_size, num_features)
             f_batch_size = f_end - f_start
 
-            activations_FBL = all_activations_FBL[
-                f_start:f_end
-            ]  # NOTE: Now F == feature_batch_size
+            activations_FBL = all_activations_fBL[f_start:f_end]
 
             results, additive_boards = aggregate_feature_labels(
                 results,
                 feature_labels,
                 custom_functions,
                 activations_FBL,
-                thresholds_TF11[:, f_start:f_end, :, :],
+                thresholds_Tf11[:, f_start:f_end, :, :],
                 f_start,
                 f_end,
                 device,

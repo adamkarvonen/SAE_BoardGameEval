@@ -21,9 +21,13 @@ I've been using this tip from Noam Shazeer:
 
 Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
 
-F  = features and minibatch size depending on the context (maybe this is stupid)
+f = All SAE features
+
+F = Batch of SAE features
 
 B = batch_size
+
+b = All inputs
 
 L = seq length (context length)
 
@@ -32,6 +36,8 @@ T = thresholds
 R = rows (or cols)
 
 C = classes for one hot encoding
+
+D = GPT d_model
 
 For example, boards begins as shape (Batch, seq_len, rows, rows, classes), and after einops.repeat is shape (num_thresholds, num_features, batch_size, seq_len, rows, rows, classes).
 
