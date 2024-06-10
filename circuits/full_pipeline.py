@@ -379,7 +379,6 @@ def analyze_sae_groups(
                     verbose=False,
                     print_results=False,
                     save_results=config.save_feature_labels,
-                    mask=config.mask,
                 )
             else:
                 with open(expected_feature_labels_output_location, "rb") as f:
@@ -410,7 +409,6 @@ def analyze_sae_groups(
                     print_results=False,
                     save_results=config.save_results,
                     precomputed=config.precompute,
-                    mask=config.mask,
                     submodule_type=config.submodule_type,
                 )
             else:

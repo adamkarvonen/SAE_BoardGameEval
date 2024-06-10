@@ -21,7 +21,6 @@ class Config:
     run_eval_sae: bool = True
     run_analysis: bool = True
     run_board_reconstruction: bool = True
-    mask: bool = False
     save_results: bool = True
     save_feature_labels: bool = False
     use_separate_test_set: bool = True

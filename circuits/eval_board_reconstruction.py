@@ -151,31 +151,6 @@ def create_max_active_mask(
     return max_indices_TFBL
 
 
-def max_activation_mask_2(
-    feature_labels_TFBLRRC: torch.Tensor, active_indices_TFBL111: torch.Tensor
-) -> torch.Tensor:
-    lookup_TFBLRRC = feature_labels_TFBLRRC * active_indices_TFBL111
-
-    lookup_TFBL = einops.reduce(lookup_TFBLRRC, "T F B L R1 R2 C -> T F B L", "sum")
-    lookup_FBL = einops.reduce(lookup_TFBL, "T F B L -> F B L", "sum")
-    zeros_FBL = lookup_FBL == 0
-    zeros_TFBL = einops.repeat(zeros_FBL, "F B L -> T F B L", T=lookup_TFBL.shape[0])
-
-    max_indices_FBL = torch.argmax(lookup_TFBL, dim=0)
-    max_indices_FBLT = F.one_hot(max_indices_FBL, num_classes=lookup_TFBL.shape[0])
-    max_indices_TFBL = einops.rearrange(max_indices_FBLT, "F B L T -> T F B L")
-    max_indices_TFBL = max_indices_TFBL * ~zeros_TFBL
-    max_indices_TFBL111 = einops.repeat(max_indices_TFBL, "T F B L -> T F B L 1 1 1")
-
-    max_boards_sum_BLRRC = einops.reduce(
-        feature_labels_TFBLRRC * max_indices_TFBL111,
-        "T F B L R1 R2 C -> B L R1 R2 C",
-        "sum",
-    )
-
-    return max_boards_sum_BLRRC
-
-
 def aggregate_feature_labels(
     results: dict,
     feature_labels: dict,
@@ -262,18 +237,11 @@ def compare_constructed_to_true_boards(
     constructed_boards: dict[str, torch.Tensor],
     batch_data: dict[str, torch.Tensor],
     device: torch.device,
-    mask: bool = False,
 ) -> dict:
 
     for custom_function in custom_functions:
         true_boards_BLRRC = batch_data[custom_function.__name__]
         constructed_boards_TBLRRC = constructed_boards[custom_function.__name__]
-
-        if mask:
-            # This works. mask_initial_board_state expects TFRRC, but BLRRC works as well.
-            true_boards_BLRRC = analysis.mask_initial_board_state(
-                true_boards_BLRRC, custom_function, device
-            )
 
         # Make it binary. Any square with multiple counts is now 1.
         constructed_boards_TBLRRC = (constructed_boards_TBLRRC > 0).int()
@@ -439,7 +407,6 @@ def test_board_reconstructions(
     print_results: bool = False,
     save_results: bool = True,
     precomputed: bool = True,
-    mask: bool = False,
     submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> dict:
 
@@ -538,7 +505,7 @@ def test_board_reconstructions(
             for custom_function in constructed_boards:
                 constructed_boards[custom_function] += additive_boards[custom_function]
         results = compare_constructed_to_true_boards(
-            results, custom_functions, constructed_boards, batch_data, device, mask
+            results, custom_functions, constructed_boards, batch_data, device
         )
 
     hyperparameters = {"n_inputs": n_inputs}
