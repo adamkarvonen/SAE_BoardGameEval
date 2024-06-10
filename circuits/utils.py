@@ -19,8 +19,20 @@ from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.chess_utils import encode_string
 from circuits.dictionary_learning.dictionary import (
     AutoEncoder,
+    GatedAutoEncoder,
+    AutoEncoderNew,
     IdentityDict,
 )
+
+# These imports are required for the current hacky way we are loading SAE classes
+from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
+from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
+from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
+from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
+from circuits.dictionary_learning.trainers.standard import StandardTrainer
+from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
+from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
 
 
 @dataclass
