@@ -6,6 +6,7 @@ import circuits.pipeline_config as pipeline_config
 TEST_INPUTS = 25
 BATCH_SIZE = 5
 TOLERANCE = 1e-6
+PRECOMPUTE = False
 
 
 def test_full_chess_pipeline():
@@ -16,7 +17,7 @@ def test_full_chess_pipeline():
         eval_results_n_inputs=TEST_INPUTS,
         board_reconstruction_n_inputs=TEST_INPUTS,
         analysis_on_cpu=True,
-        precompute=True,
+        precompute=PRECOMPUTE,
     )
     autoencoder_group_paths = ["autoencoders/testing_chess"]
     csv_output_path = f"{autoencoder_group_paths[0]}/results.csv"
@@ -43,7 +44,7 @@ def test_full_othello_pipeline():
         eval_results_n_inputs=TEST_INPUTS,
         board_reconstruction_n_inputs=TEST_INPUTS,
         analysis_on_cpu=True,
-        precompute=True,
+        precompute=PRECOMPUTE,
     )
     autoencoder_group_paths = ["autoencoders/testing_othello"]
     csv_output_path = f"{autoencoder_group_paths[0]}/results.csv"

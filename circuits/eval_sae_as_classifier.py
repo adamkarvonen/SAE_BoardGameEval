@@ -583,13 +583,6 @@ def check_if_autoencoder_is_othello(autoencoder_group_path: str) -> bool:
     raise ValueError("Could not determine if autoencoder is for Othello or Chess.")
 
 
-def get_model_name(othello: bool) -> str:
-    if othello:
-        return "Baidicoot/Othello-GPT-Transformer-Lens"
-    else:
-        return "adamkarvonen/8LayerChessGPT2"
-
-
 def construct_dataset(
     othello: bool,
     custom_functions: list[Callable],
@@ -621,54 +614,6 @@ def construct_dataset(
     return data
 
 
-def get_recommended_custom_functions(othello: bool) -> list[Callable]:
-    if not othello:
-        return get_all_chess_functions(othello)
-        custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
-    else:
-        custom_functions = [
-            othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
-            othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
-            othello_utils.games_batch_to_valid_moves_BLRRC,
-            othello_utils.games_batch_to_state_stack_lines_mine_BLRCC,
-            othello_utils.games_batch_to_state_stack_length_lines_mine_BLRCC,
-            othello_utils.games_batch_to_state_stack_opponent_length_lines_mine_BLRCC,
-            # othello_utils.games_batch_to_state_stack_lines_yours_BLRCC,
-        ]
-    return custom_functions
-
-
-def get_all_chess_functions(othello: bool) -> list[Callable]:
-    if othello:
-        raise ValueError("This is a chess function")
-    custom_functions = [
-        chess_utils.board_to_piece_state,
-        chess_utils.board_to_piece_masked_blank_state,
-        chess_utils.board_to_piece_masked_blank_and_initial_state,
-        chess_utils.board_to_piece_color_state,
-        chess_utils.board_to_pin_state,
-        chess_utils.board_to_threat_state,
-        chess_utils.board_to_check_state,
-        chess_utils.board_to_legal_moves_state,
-        chess_utils.board_to_specific_fork,
-        chess_utils.board_to_any_fork,
-        chess_utils.board_to_has_castling_rights,
-        chess_utils.board_to_has_queenside_castling_rights,
-        chess_utils.board_to_has_kingside_castling_rights,
-        chess_utils.board_to_has_legal_en_passant,
-        chess_utils.board_to_pseudo_legal_moves_state,
-        chess_utils.board_to_can_claim_draw,
-        chess_utils.board_to_can_check_next,
-        chess_utils.board_to_has_bishop_pair,
-        chess_utils.board_to_has_mate_threat,
-        chess_utils.board_to_can_capture_queen,
-        chess_utils.board_to_has_queen,
-        chess_utils.board_to_has_connected_rooks,
-        chess_utils.board_to_ambiguous_moves,
-    ]
-    return custom_functions
-
-
 def get_recommended_indexing_functions(othello: bool) -> list[Callable]:
     if not othello:
         indexing_functions = [chess_utils.find_dots_indices]
@@ -677,69 +622,8 @@ def get_recommended_indexing_functions(othello: bool) -> list[Callable]:
     return indexing_functions
 
 
-def eval_sae_group(
-    autoencoder_group_paths: list[str],
-    device: str = "cuda",
-    batch_size: int = 10,
-    n_inputs: int = 1000,
-):
-    """Example autoencoder_group_paths = ['autoencoders/othello_layer5_ef4/'].
-    At batch_size == 10, it uses around 2GB of VRAM.
-    VRAM does not scale with n_inputs, only batch_size.
-
-    Returns a dictionary with autoencoder_group_path as key and a list of output locations as value.
-    """
-    model_path = "unused"
-
-    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
-    othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
-
-    indexing_functions = get_recommended_indexing_functions(othello)
-    custom_functions = get_recommended_custom_functions(othello)
-
-    param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
-
-    print("Constructing evaluation dataset...")
-
-    model_name = get_model_name(othello)
-    data = construct_dataset(othello, custom_functions, n_inputs, split="train", device=device)
-
-    print("Starting evaluation...")
-
-    for autoencoder_group_path, indexing_function in param_combinations:
-        print(f"Autoencoder group path: {autoencoder_group_path}")
-        indexing_function_name = get_indexing_function_name(indexing_function)
-
-        print(f"Indexing function: {indexing_function_name}")
-
-        folders = get_nested_folders(autoencoder_group_path)
-
-        for autoencoder_path in folders:
-            print("Evaluating autoencoder:", autoencoder_path)
-
-            results = aggregate_statistics(
-                custom_functions,
-                autoencoder_path,
-                n_inputs,
-                batch_size,
-                device,
-                model_path,
-                model_name,
-                data.copy(),
-                indexing_function=indexing_function,
-                othello=othello,
-            )
-
-
-if __name__ == "__main__":
-    # autoencoder_group_paths = ["autoencoders/group1/", "autoencoders/chess_layer_0_subset/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
-    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
-    autoencoder_group_paths = ["autoencoders/group-2024-05-07/"]
-
-    eval_sae_group(
-        autoencoder_group_paths,
-        batch_size=100,
-        n_inputs=1000,
-    )
+def get_model_name(othello: bool) -> str:
+    if othello:
+        return "Baidicoot/Othello-GPT-Transformer-Lens"
+    else:
+        return "adamkarvonen/8LayerChessGPT2"

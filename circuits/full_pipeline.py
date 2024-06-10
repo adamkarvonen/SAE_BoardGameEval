@@ -225,11 +225,12 @@ def analyze_sae_groups(
     indexing_functions = eval_sae.get_recommended_indexing_functions(othello)
     indexing_function = indexing_functions[0]
 
-    custom_functions = eval_sae.get_recommended_custom_functions(othello)
-
-    model_name = eval_sae.get_model_name(othello)
-
-    game_name = "othello" if othello else "chess"
+    if othello:
+        custom_functions = config.othello_functions
+        game_name = "othello"
+    else:
+        custom_functions = config.chess_functions
+        game_name = "chess"
 
     train_dataset_name = f"{game_name}_train_dataset.pkl"
     test_dataset_name = f"{game_name}_test_dataset.pkl"
