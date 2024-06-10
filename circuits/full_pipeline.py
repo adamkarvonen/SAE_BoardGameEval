@@ -506,16 +506,24 @@ othello_mlp_output_path = "autoencoders/othello_mlp_acts_identity_aes/results.cs
 chess_mlp_group_paths = ["autoencoders/chess_mlp_acts_identity_aes/"]
 chess_mlp_output_path = "autoencoders/chess_mlp_acts_identity_aes/results.csv"
 
+othello_all_layers_group_paths = ["autoencoders/all_layers_othello_p_anneal_0530/"]
+othello_all_layers_output_path = "autoencoders/all_layers_othello_p_anneal_0530/results.csv"
+
+chess_all_layers_group_paths = ["autoencoders/chess_all_layers_resid/"]
+chess_all_layers_output_path = "autoencoders/chess_all_layers_resid/results.csv"
+
 # We could optionally mix and max othello / chess groups here
 othello_groups = [
     (othello_group_paths, othello_output_path),
     (othello_random_group_paths, othello_random_output_path),
     (othello_mlp_group_paths, othello_mlp_output_path),
+    (othello_all_layers_group_paths, othello_all_layers_output_path),
 ]
 chess_groups = [
     (chess_group_paths, chess_output_path),
     (chess_random_group_paths, chess_random_output_path),
     (chess_mlp_group_paths, chess_mlp_output_path),
+    (chess_all_layers_group_paths, chess_all_layers_output_path),
 ]
 
 if __name__ == "__main__":
