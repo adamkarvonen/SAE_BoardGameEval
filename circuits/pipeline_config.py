@@ -5,6 +5,10 @@ import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
 import circuits.utils as utils
 
+# NOTE: A major baked in assumption is that d_model == 512
+# If activation_dim is 512, then the input is the residual stream
+# If it's 2048, then the input is the mlp activations
+
 
 @dataclass
 class Config:
@@ -16,7 +20,6 @@ class Config:
     analysis_high_threshold: float = 0.95
     analysis_low_threshold: float = 0.1
     analysis_significance_threshold: int = 10
-    submodule_type: utils.SubmoduleType = utils.SubmoduleType.resid_post
     run_eval_results: bool = True
     run_eval_sae: bool = True
     run_analysis: bool = True

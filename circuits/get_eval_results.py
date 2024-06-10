@@ -19,7 +19,6 @@ def get_evals(
     data: dict,
     othello: bool = False,
     save_results: bool = True,
-    submodule_type: utils.SubmoduleType = utils.SubmoduleType.resid_post,
 ) -> dict:
 
     torch.set_grad_enabled(False)
@@ -30,8 +29,6 @@ def get_evals(
         data,
         device,
         n_inputs,
-        othello,
-        submodule_type,
     )
 
     if othello:

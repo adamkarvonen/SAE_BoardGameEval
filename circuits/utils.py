@@ -40,7 +40,7 @@ from IPython import embed
 @dataclass
 class AutoEncoderBundle:
     ae: AutoEncoder
-    buffer: NNsightActivationBuffer
+    buffer: Optional[NNsightActivationBuffer]
     model: NNsight
     activation_dim: int
     dictionary_size: int
@@ -132,7 +132,7 @@ def get_identity_autoencoder(config: dict) -> IdentityDict:
     Then, in full_pipeline.ipynb, set:
     autoencoder_group_paths = ["../autoencoders/chess_mlp_acts_identity_aes/"]
     csv_output_path = "../autoencoders/chess_mlp_acts_identity_aes/results.csv"
-    submodule_type = SubmoduleType.mlp_act"""
+    """
     ae = IdentityDict()
     ae.activation_dim = config["trainer"]["activation_dim"]
     ae.dict_size = config["trainer"]["dict_size"]
@@ -145,7 +145,7 @@ def get_ae_bundle(
     data: Any,  # iter of list of ints
     batch_size: int,
     n_ctxs: int = 512,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
+    include_buffer: bool = True,
 ) -> AutoEncoderBundle:
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
@@ -212,27 +212,34 @@ def get_ae_bundle(
 
     model = get_model(model_name, device)
 
-    if submodule_type == submodule_type.resid_post:
-        assert activation_dim == 512
-    elif submodule_type == submodule_type.mlp_act:
-        assert activation_dim == 512 * 4
+    if activation_dim == 512:
+        submodule_type = SubmoduleType.resid_post
+        print("Using resid_post submodule")
+    elif activation_dim == 512 * 4:
+        submodule_type = SubmoduleType.mlp_act
+        print("Using mlp_act submodule")
+    else:
+        raise ValueError("activation_dim not recognized")
 
     submodule = get_submodule(model_name, layer, model, submodule_type)
 
     context_length = config["buffer"]["ctx_len"]
 
-    buffer = NNsightActivationBuffer(
-        data,
-        model,
-        submodule,
-        n_ctxs=n_ctxs,
-        ctx_len=context_length,
-        refresh_batch_size=batch_size,
-        io="out",
-        d_submodule=activation_dim,
-        device=device,
-        out_batch_size=batch_size,
-    )
+    if include_buffer:
+        buffer = NNsightActivationBuffer(
+            data,
+            model,
+            submodule,
+            n_ctxs=n_ctxs,
+            ctx_len=context_length,
+            refresh_batch_size=batch_size,
+            io="out",
+            d_submodule=activation_dim,
+            device=device,
+            out_batch_size=batch_size,
+        )
+    else:
+        buffer = None
 
     return AutoEncoderBundle(
         ae=ae,

@@ -407,7 +407,6 @@ def test_board_reconstructions(
     print_results: bool = False,
     save_results: bool = True,
     precomputed: bool = True,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> dict:
 
     torch.set_grad_enabled(False)
@@ -419,11 +418,8 @@ def test_board_reconstructions(
         data,
         device,
         n_inputs,
-        othello,
-        submodule_type,
+        include_buffer=False,
     )
-
-    ae_bundle.buffer = None
 
     thresholds_TF11 = feature_labels["thresholds"].to(device)
     alive_features_F = feature_labels["alive_features"].to(device)

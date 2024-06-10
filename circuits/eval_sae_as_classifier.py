@@ -390,8 +390,7 @@ def prep_data_ae_buffer_and_model(
     data: dict,
     device: torch.device,
     n_inputs: int,
-    othello: bool = False,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
+    include_buffer: bool = True,
 ) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
     """Moves data from the data dictionary into the NNsight activation buffer.
     We also load the autoencoder and model, and move them to the device.
@@ -416,7 +415,7 @@ def prep_data_ae_buffer_and_model(
         activation_buffer_data,
         batch_size,
         n_ctxs,
-        submodule_type,
+        include_buffer=include_buffer,
     )
     ae_bundle.ae = ae_bundle.ae.to(device)
 
@@ -441,7 +440,6 @@ def aggregate_statistics(
     othello: bool = False,
     save_results: bool = True,
     precomputed: bool = True,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py.
@@ -458,8 +456,6 @@ def aggregate_statistics(
         data,
         device,
         n_inputs,
-        othello,
-        submodule_type,
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length

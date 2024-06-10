@@ -326,7 +326,6 @@ def analyze_sae_groups(
                     utils.to_device(eval_results_data.copy(), device),
                     othello=othello,
                     save_results=config.save_results,
-                    submodule_type=config.submodule_type,
                 )
             else:
                 with open(expected_eval_results_output_location, "rb") as f:
@@ -352,7 +351,6 @@ def analyze_sae_groups(
                     othello=othello,
                     save_results=config.save_results,
                     precomputed=config.precompute,
-                    submodule_type=config.submodule_type,
                 )
             else:
                 with open(expected_aggregation_output_location, "rb") as f:
@@ -409,7 +407,6 @@ def analyze_sae_groups(
                     print_results=False,
                     save_results=config.save_results,
                     precomputed=config.precompute,
-                    submodule_type=config.submodule_type,
                 )
             else:
                 with open(expected_reconstruction_output_location, "rb") as f:
