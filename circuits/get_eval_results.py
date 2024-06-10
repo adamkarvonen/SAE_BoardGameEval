@@ -80,11 +80,8 @@ def get_sae_group_evals(
 
     print("Constructing evaluation dataset...")
 
-    custom_functions = []
-
-    model_name = eval_sae.get_model_name(othello)
     data = eval_sae.construct_dataset(
-        othello, custom_functions, split="train", n_inputs=(eval_inputs * 2), device=device
+        othello, [], split="train", n_inputs=(eval_inputs * 2), device=device
     )
 
     print("Starting evaluation...")

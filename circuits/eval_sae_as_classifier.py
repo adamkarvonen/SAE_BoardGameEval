@@ -623,10 +623,3 @@ def get_recommended_indexing_functions(othello: bool) -> list[Callable]:
     else:
         indexing_functions = [None]
     return indexing_functions
-
-
-def get_model_name(othello: bool) -> str:
-    if othello:
-        return "Baidicoot/Othello-GPT-Transformer-Lens"
-    else:
-        return "adamkarvonen/8LayerChessGPT2"
