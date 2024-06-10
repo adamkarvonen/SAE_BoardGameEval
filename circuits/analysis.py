@@ -2,7 +2,6 @@ import pickle
 import torch
 from typing import Callable
 import einops
-import chess
 import os
 from typing import Optional
 
@@ -10,8 +9,6 @@ import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
 from circuits.utils import to_device, get_nested_folders
 from circuits.eval_sae_as_classifier import normalize_tracker
-
-from IPython import embed
 
 
 def get_all_results_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
@@ -587,9 +584,6 @@ def analyze_sae_group(
 
         for autoencoder_path in folder_names:
             file_names = get_all_results_file_names(autoencoder_path, "feature_labels")
-
-            embed()
-            exit()
 
             for file_name in file_names:
                 if print_results:

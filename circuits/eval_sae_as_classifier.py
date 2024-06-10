@@ -5,7 +5,6 @@ import einops
 from datasets import load_dataset
 from typing import Callable, Optional
 import math
-import itertools
 import json
 
 from circuits.utils import (

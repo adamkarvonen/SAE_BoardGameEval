@@ -1,12 +1,10 @@
 import chess
 import pandas as pd
 import torch
-from torch.nn import functional as F
 from typing import Callable, Optional
 from collections import defaultdict
 from dataclasses import dataclass
 from jaxtyping import Int, Float, jaxtyped
-from beartype import beartype
 from torch import Tensor
 from enum import Enum
 import re

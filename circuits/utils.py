@@ -17,24 +17,10 @@ import pandas as pd
 
 from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.chess_utils import encode_string
-from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning.dictionary import (
     AutoEncoder,
-    GatedAutoEncoder,
-    AutoEncoderNew,
     IdentityDict,
 )
-from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
-from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
-from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
-from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
-from circuits.dictionary_learning.trainers.standard import StandardTrainer
-from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
-from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
-from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
-
-from IPython import embed
 
 
 @dataclass

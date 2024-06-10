@@ -4,10 +4,7 @@ import torch
 from tqdm import tqdm
 from pydantic import BaseModel
 from typing import Optional, Callable
-from nnsight import LanguageModel
-import pickle
 
-from circuits.dictionary_learning import AutoEncoder, ActivationBuffer
 import circuits.chess_utils as chess_utils
 from circuits.chess_utils import Config, get_num_classes
 from circuits.utils import collect_activations_batch, get_ae_bundle, AutoEncoderBundle
