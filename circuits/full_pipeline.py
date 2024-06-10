@@ -451,7 +451,7 @@ def analyze_sae_groups(
     )
 
     results_filename_filter = str(config.eval_sae_n_inputs) + "_"
-    f1_analysis_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    f1_analysis_thresholds = config.f1_analysis_thresholds.tolist()
 
     RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)])
 
