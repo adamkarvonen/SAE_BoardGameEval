@@ -483,9 +483,9 @@ othello_group_paths = [
 othello_output_path = "autoencoders/othello-trained_model-layer_5-2024-05-23/results.csv"
 
 othello_random_group_paths = [
-    "autoencoders/othello-random_model-layer_5-2024-05-23/othello-random_model-layer_5-standard",
+    "autoencoders/othello-random_model-layer_5-standard",
 ]
-othello_random_output_path = "autoencoders/othello-random_model-layer_5-2024-05-23/results.csv"
+othello_random_output_path = "autoencoders/othello-random_model-layer_5-standard/results.csv"
 
 chess_group_paths = [
     "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-gated",
@@ -496,9 +496,9 @@ chess_group_paths = [
 chess_output_path = "autoencoders/chess-trained_model-layer_5-2024-05-23/results.csv"
 
 chess_random_group_paths = [
-    "autoencoders/chess-random_model-layer_5-2024-05-23/chess-random_model-layer_5-standard",
+    "autoencoders/chess-random_model-layer_5-standard",
 ]
-chess_random_output_path = "autoencoders/chess-random_model-layer_5-2024-05-23/results.csv"
+chess_random_output_path = "autoencoders/chess-random_model-layer_5-standard/results.csv"
 
 othello_mlp_group_paths = ["autoencoders/othello_mlp_acts_identity_aes/"]
 othello_mlp_output_path = "autoencoders/othello_mlp_acts_identity_aes/results.csv"
