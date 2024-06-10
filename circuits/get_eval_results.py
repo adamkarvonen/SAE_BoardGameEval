@@ -31,7 +31,9 @@ def get_evals(
         n_inputs,
     )
 
-    if othello:
+    # Hacky way to check if the autoencoder comes from the GPT model Baidicoot/Othello-GPT-Transformer-Lens
+    # If this fails, it will crash and not fail silently
+    if othello and "random" not in autoencoder_path:
         eval_results = evaluate(
             ae_bundle.ae,
             ae_bundle.buffer,
