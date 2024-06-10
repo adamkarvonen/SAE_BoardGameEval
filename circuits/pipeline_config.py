@@ -23,7 +23,6 @@ class Config:
     run_board_reconstruction: bool = True
     save_results: bool = True
     save_feature_labels: bool = False
-    use_separate_test_set: bool = True
     precompute: bool = True
     analysis_on_cpu: bool = False
     f1_analysis_thresholds = torch.arange(0.0, 1.1, 0.1)
