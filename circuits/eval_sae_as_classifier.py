@@ -576,9 +576,16 @@ def check_if_autoencoder_is_othello(autoencoder_group_path: str) -> bool:
     for folder in folders:
         with open(folder + "config.json", "r") as f:
             config = json.load(f)
-        if config["buffer"]["ctx_len"] == 59:
+        model_name = config["trainer"]["lm_name"]
+        if (
+            model_name == "adamkarvonen/RandomWeights8LayerOthelloGPT2"
+            or model_name == "Baidicoot/Othello-GPT-Transformer-Lens"
+        ):
             return True
-        elif config["buffer"]["ctx_len"] == 256:
+        if (
+            model_name == "adamkarvonen/RandomWeights8LayerChessGPT2"
+            or model_name == "adamkarvonen/8LayerChessGPT2"
+        ):
             return False
     raise ValueError("Could not determine if autoencoder is for Othello or Chess.")
 
