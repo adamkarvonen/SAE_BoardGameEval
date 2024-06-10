@@ -13,6 +13,7 @@ from transformers import GPT2LMHeadModel
 from transformer_lens import HookedTransformer
 from enum import Enum
 from typing import Optional
+import pandas as pd
 
 from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.chess_utils import encode_string
@@ -112,6 +113,16 @@ def get_submodule(
         return get_mlp_activations_submodule(model_name, layer, model)
     else:
         raise ValueError("submodule_type not recognized")
+
+
+def concatenate_csv_files(file_list: list[str], output_file: str):
+    # Load and concatenate the CSV files
+    dataframes = [pd.read_csv(file) for file in file_list]
+    concatenated_df = pd.concat(dataframes)
+
+    # Save the concatenated data frame to a new CSV file
+    concatenated_df.to_csv(output_file, index=False)
+    print(f"Concatenated data saved to {output_file}")
 
 
 def get_identity_autoencoder(config: dict) -> IdentityDict:
