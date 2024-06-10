@@ -2,7 +2,7 @@ import torch
 import itertools
 import pickle
 
-from circuits.nnsight_buffer import NNsightActivationBuffer
+from dictionary_learning.buffer import NNsightActivationBuffer
 from dictionary_learning.training import trainSAE
 from dictionary_learning.trainers.standard import StandardTrainer
 
