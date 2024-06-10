@@ -248,7 +248,6 @@ def analyze_sae_groups(
             dataset_size,
             split="train",
             device=device,
-            models_path=config.model_path,
             precompute_dataset=config.precompute,
         )
         if config.precompute:
@@ -268,7 +267,6 @@ def analyze_sae_groups(
             dataset_size,
             split="test",
             device=device,
-            models_path=config.model_path,
             precompute_dataset=config.precompute,
         )
         if config.precompute:
@@ -282,7 +280,6 @@ def analyze_sae_groups(
         eval_results_dataset_size,
         split="train",
         device=device,
-        models_path=config.model_path,
         precompute_dataset=config.precompute,
     )
 
@@ -325,8 +322,6 @@ def analyze_sae_groups(
                     config.eval_results_n_inputs,
                     config.batch_size,
                     device,
-                    config.model_path,
-                    model_name,
                     utils.to_device(eval_results_data.copy(), device),
                     othello=othello,
                     save_results=config.save_results,
@@ -351,8 +346,6 @@ def analyze_sae_groups(
                     n_inputs=config.eval_sae_n_inputs,
                     batch_size=config.batch_size,
                     device=device,
-                    model_path=config.model_path,
-                    model_name=model_name,
                     data=utils.to_device(train_data.copy(), device),
                     indexing_function=indexing_function,
                     othello=othello,
@@ -411,7 +404,6 @@ def analyze_sae_groups(
                     n_inputs=config.board_reconstruction_n_inputs,
                     batch_size=config.batch_size,
                     device=device,
-                    model_name=model_name,
                     data=utils.to_device(test_data.copy(), device),
                     othello=othello,
                     print_results=False,

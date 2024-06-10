@@ -11,7 +11,6 @@ def test_full_pipeline():
         batch_size=5,
         eval_results_n_inputs=25,
         board_reconstruction_n_inputs=25,
-        model_path="models/",
         analysis_on_cpu=True,
     )
     autoencoder_group_paths = ["autoencoders/testing_chess"]

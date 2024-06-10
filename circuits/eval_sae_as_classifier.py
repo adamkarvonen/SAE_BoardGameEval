@@ -63,7 +63,6 @@ def construct_chess_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
     split: str,
-    models_path: str = "models/",
     max_str_length: int = 256,
     device: str = "cpu",
     precompute_dataset: bool = True,
@@ -73,17 +72,14 @@ def construct_chess_dataset(
         streaming=False,
     )
 
-    meta_path = models_path + "meta.pkl"
-
-    with open(meta_path, "rb") as f:
-        meta = pickle.load(f)
+    meta = chess_utils.load_chess_meta()
 
     pgn_strings = []
     encoded_inputs = []
-    for i, example in enumerate(dataset[split]):
+    for i, example in enumerate(dataset[split]["text"]):
         if i >= n_inputs:
             break
-        pgn_string = example["text"][:max_str_length]
+        pgn_string = example[:max_str_length]
         pgn_strings.append(pgn_string)
         encoded_input = chess_utils.encode_string(meta, pgn_string)
         encoded_inputs.append(encoded_input)
@@ -391,8 +387,6 @@ def filter_data_by_custom_indices(
 def prep_data_ae_buffer_and_model(
     autoencoder_path: str,
     batch_size: int,
-    model_path: str,
-    model_name: str,
     data: dict,
     device: torch.device,
     n_inputs: int,
@@ -421,8 +415,6 @@ def prep_data_ae_buffer_and_model(
         device,
         activation_buffer_data,
         batch_size,
-        model_path,
-        model_name,
         n_ctxs,
         submodule_type,
     )
@@ -444,8 +436,6 @@ def aggregate_statistics(
     n_inputs: int,
     batch_size: int,
     device: torch.device,
-    model_path: str,
-    model_name: str,
     data: dict,
     indexing_function: Optional[Callable] = None,
     othello: bool = False,
@@ -465,8 +455,6 @@ def aggregate_statistics(
     data, ae_bundle, pgn_strings, encoded_inputs = prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
-        model_path,
-        model_name,
         data,
         device,
         n_inputs,
@@ -608,7 +596,6 @@ def construct_dataset(
     n_inputs: int,
     split: str,
     device: str,
-    models_path: str = "models/",
     precompute_dataset: bool = True,
 ) -> dict:
     """Constructs the dataset for either Othello or Chess.
@@ -620,7 +607,6 @@ def construct_dataset(
             n_inputs,
             split=split,
             device=device,
-            models_path=models_path,
             precompute_dataset=precompute_dataset,
         )
     else:

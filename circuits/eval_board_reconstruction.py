@@ -434,7 +434,6 @@ def test_board_reconstructions(
     n_inputs: int,
     batch_size: int,
     device: torch.device,
-    model_name: str,
     data: dict,
     othello: bool = False,
     print_results: bool = False,
@@ -450,8 +449,6 @@ def test_board_reconstructions(
     data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
-        "",
-        model_name,
         data,
         device,
         n_inputs,
@@ -558,94 +555,3 @@ def test_board_reconstructions(
             pickle.dump(results, f)
         results = to_device(results, device)
     return results
-
-
-def test_sae_group_board_reconstruction(
-    autoencoder_group_paths: list[str],
-    device: str = "cuda",
-    batch_size: int = 10,
-    n_inputs: int = 1000,
-    print_results: bool = False,
-    save_results: bool = True,
-):
-    """Example autoencoder_group_paths = ['autoencoders/othello_layer5_ef4/'].
-    At batch_size == 10, it uses around 2GB of VRAM.
-    VRAM does not scale with n_inputs, only batch_size."""
-
-    torch.set_printoptions(sci_mode=False, precision=2)
-
-    print("Starting evaluation...")
-
-    for autoencoder_group_path in autoencoder_group_paths:
-        print(f"Autoencoder group path: {autoencoder_group_path}")
-
-        othello = eval_sae.check_if_autoencoder_is_othello(autoencoder_group_path)
-        model_name = eval_sae.get_model_name(othello)
-
-        folders = get_nested_folders(autoencoder_group_path)
-
-        if len(folders) == 0:
-            print("No autoencoders found in this folder.")
-            continue
-
-        # All of this fiddling around is to make sure we have the right custom functions
-        # So we only have to construct the evaluation dataset once
-        first_folder = folders[0]
-
-        feature_label_files = get_all_feature_label_file_names(first_folder)
-
-        if len(feature_label_files) == 0:
-            print("No feature label files found in this folder.")
-            continue
-
-        first_feature_labels = feature_label_files[0]
-        with open(first_folder + first_feature_labels, "rb") as f:
-            feature_labels = pickle.load(f)
-
-        custom_functions = []
-        for key in feature_labels:
-            if key in chess_utils.config_lookup:
-                custom_functions.append(chess_utils.config_lookup[key].custom_board_state_function)
-
-        print("Constructing evaluation dataset...")
-
-        # TODO: This is pretty hacky. It assumes that all autoencoder_group_paths are othello XOR chess
-        # It shouldn't be too hard to make it smarter
-        data = eval_sae.construct_dataset(
-            othello, custom_functions, n_inputs, split="test", device=device
-        )
-
-        for autoencoder_path in folders:
-
-            print("\n\n\nTesting autoencoder:", autoencoder_path)
-            feature_label_files = get_all_feature_label_file_names(autoencoder_path)
-
-            for feature_label_file in feature_label_files:
-                print("Testing feature label file:", feature_label_file)
-                output_file = feature_label_file.replace("feature_labels.pkl", "reconstruction.pkl")
-
-                with open(autoencoder_path + feature_label_file, "rb") as f:
-                    feature_labels = pickle.load(f)
-
-                test_board_reconstructions(
-                    custom_functions,
-                    autoencoder_path,
-                    feature_labels,
-                    output_file,
-                    n_inputs,
-                    batch_size,
-                    device,
-                    model_name,
-                    data.copy(),
-                    othello=othello,
-                    print_results=print_results,
-                    save_results=save_results,
-                )
-
-
-if __name__ == "__main__":
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
-    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
-
-    test_sae_group_board_reconstruction(autoencoder_group_paths)

@@ -144,8 +144,6 @@ def get_ae_bundle(
     device: torch.device,
     data: Any,  # iter of list of ints
     batch_size: int,
-    model_path: str = "models/",
-    model_name: str = "adamkarvonen/8LayerChessGPT2",
     n_ctxs: int = 512,
     submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> AutoEncoderBundle:
@@ -180,8 +178,7 @@ def get_ae_bundle(
         ).ae.__class__.from_pretrained(autoencoder_model_path, device=device)
         ae = ae.to(device)
 
-    _model_name = config["trainer"]["lm_name"]
-    assert model_name == _model_name
+    model_name = config["trainer"]["lm_name"]
 
     layer = config["trainer"]["layer"]
 

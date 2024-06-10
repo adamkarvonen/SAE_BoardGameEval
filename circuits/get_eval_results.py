@@ -16,8 +16,6 @@ def get_evals(
     n_inputs: int,
     batch_size: int,
     device: torch.device,
-    model_path: str,
-    model_name: str,
     data: dict,
     othello: bool = False,
     save_results: bool = True,
@@ -29,8 +27,6 @@ def get_evals(
     data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
-        model_path,
-        model_name,
         data,
         device,
         n_inputs,
@@ -81,7 +77,6 @@ def get_sae_group_evals(
     eval_inputs: int = 1000,
     batch_size: int = 10,
 ):
-    model_path = "unused"
 
     # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
     othello = eval_sae.check_if_autoencoder_is_othello(autoencoder_group_paths[0])
@@ -108,8 +103,6 @@ def get_sae_group_evals(
                 eval_inputs,
                 batch_size,
                 device,
-                model_path,
-                model_name,
                 data.copy(),
                 othello=othello,
             )

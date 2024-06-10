@@ -11,6 +11,8 @@ from torch import Tensor
 from enum import Enum
 import re
 from tqdm import tqdm
+import pickle
+from importlib import resources
 
 import circuits.othello_utils as othello_utils
 
@@ -49,6 +51,19 @@ DEFAULT_DTYPE = torch.int8
 class PlayerColor(Enum):
     WHITE = "White"
     BLACK = "Black"
+
+
+def load_chess_meta():
+    """
+    Loads the chess nanogpt meta dictionary from the 'resources' directory of the 'circuits' package using the modern `files()` method.
+
+    Returns:
+    - dict: The loaded meta dictionary containing 'stoi' and 'itos'.
+    """
+    resource_path = resources.files("circuits.resources") / "meta.pkl"
+    with resource_path.open("rb") as f:
+        meta = pickle.load(f)
+    return meta
 
 
 def board_to_skill_state(board: chess.Board, skill: float) -> torch.Tensor:
@@ -1097,6 +1112,7 @@ def create_state_stack(
         initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
     # Apply each move to the board
     for move in moves_string.split():
+        # TODO It may be dangerous to fail silently here
         try:
             count += 1
             # Skip move numbers
