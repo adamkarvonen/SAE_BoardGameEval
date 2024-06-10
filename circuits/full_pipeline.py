@@ -197,13 +197,7 @@ def append_results(
     return df
 
 
-def analyze_sae_groups(
-    autoencoder_group_paths: list[str], csv_output_path: str, config: p_config.Config
-):
-
-    N_GPUS = 1
-    RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)])
-
+def check_all_sae_groups(autoencoder_group_paths: list[str]) -> bool:
     prev_othello = None
     for path in autoencoder_group_paths:
         assert os.path.isdir(path), f"Directory does not exist: {path}"
@@ -213,8 +207,17 @@ def analyze_sae_groups(
                 cur_othello == prev_othello
             ), "All autoencoders in a group must be trained on the same game"
         prev_othello = cur_othello
+    return cur_othello
 
-    othello = cur_othello
+
+def analyze_sae_groups(
+    autoencoder_group_paths: list[str], csv_output_path: str, config: p_config.Config
+):
+
+    N_GPUS = 1
+    RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)])
+
+    othello = check_all_sae_groups(autoencoder_group_paths)
 
     dataset_size = max(config.eval_sae_n_inputs, config.board_reconstruction_n_inputs)
 
