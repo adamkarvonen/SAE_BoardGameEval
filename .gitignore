@@ -10,6 +10,7 @@ autoencoders/*
 !autoencoders/fix_ae_device.ipynb
 !autoencoders/utils/
 !autoencoders/gen_identity_ae_folders.ipynb
+!autoencoders/download_saes.sh
 
 # Ignore all directories under analysis/
 analysis/*/
