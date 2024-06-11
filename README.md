@@ -1,12 +1,12 @@
 **Setup** 
 
-Create a new virtual python environment (I'm using 3.11) and run `./setup.sh`, or run each command in `setup.sh` individually. This will install all requirements, installs the project in editable mode, and checks out the correct branch of the `dictionary_learning` submodule. By default, the repo includes an example Chess and Othello SAE. If you want to download sweeps of SAEs for analysis, refer to `autoencoders/download_saes.sh`.
+Create a new virtual python environment (I'm using 3.11) and run `./setup.sh`, or run each command in `setup.sh` individually. This will install all requirements, installs the project in editable mode, and check out the correct branch of the `dictionary_learning` submodule. By default, the repo includes an example Chess and Othello SAE. If you want to download sweeps of SAEs for analysis, refer to `autoencoders/download_saes.sh`.
 
 **Getting Started**
 
 There is a walkthrough of the approach in `circuits/full_pipeline_walkthrough.ipynb`.
 
-To perform the analysis in the paper, run `python full_pipeline.py`. At the bottom of the script, you can select which autoencoder groups you want to analyze. The output of `full_pipeline.py` for the default autoencoder group is `f1_results.csv` at `autoencoders/testing_chess`.
+To perform the analysis in the paper, run `python full_pipeline.py`. By default, it runs on the single Chess SAE in `autoencoders/testing_chess`. It takes a few minutes on an RTX 3090 and uses < 10GB of VRAM. By decreasing the batch size, it can run using < 2 GB of VRAM if necessary. At the bottom of the script, you can select which autoencoder groups you want to analyze. The output of `full_pipeline.py` for the default autoencoder group is `f1_results.csv` at `autoencoders/testing_chess`.
 
 This location of this `f1_results.csv` is already set in `f1_analysis.ipynb` to recreate all graphs from the paper. The data used to create the graphs from our paper can be found in `autoencoders/saved_data`.
 
