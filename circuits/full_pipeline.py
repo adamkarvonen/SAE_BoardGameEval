@@ -529,5 +529,9 @@ chess_groups = [
 if __name__ == "__main__":
     groups = othello_groups
     main_config = p_config.Config()
-    for group_paths, output_path in groups:
-        analyze_sae_groups(group_paths, output_path, main_config)
+
+    # To edit the main_config, you can do things like:
+    # main_config.eval_sae_n_inputs = 1000
+
+    for group_path, output_path in groups:
+        analyze_sae_groups(group_path, output_path, main_config)
