@@ -312,6 +312,9 @@ def get_firing_features(
     alive_indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
     max_features = max_features[alive_indices]
 
+    # Rarely MLP neurons can have negative max values. This is a simple fix.
+    max_features = torch.abs(max_features)
+
     return alive_indices, max_features
 
 
