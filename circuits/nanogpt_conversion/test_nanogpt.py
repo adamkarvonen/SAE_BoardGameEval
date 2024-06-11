@@ -1,33 +1,39 @@
-from context import circuits
+# NOTE: This file is outdated. I used it to convert the pytorch weights into the HuggingFace model format
+# And verified that the conversion was successful. I then uploaded the model to the HuggingFace model hub
+# I'm keeping this file here for reference, but it is not used in the current implementation
+# To use this file, move the test into tests/ and move `nanogpt.py` and `nanogpt_to_hf_transformers.py` into circuits/
+# Then uncomment the tests and run them
 
-from circuits import nanogpt_to_hf_transformers
+# from context import circuits
 
-from transformers import GPT2LMHeadModel, GPT2Config
+# from circuits import nanogpt_to_hf_transformers
 
-import pickle
-import torch
+# from transformers import GPT2LMHeadModel, GPT2Config
 
-META_PATH = "models/meta.pkl"
+# import pickle
+# import torch
 
-
-def load_meta():
-    with open(META_PATH, "rb") as f:
-        return pickle.load(f)
+# META_PATH = "models/meta.pkl"
 
 
-def test_tokenizer():
-    test_str = ";1.e4 e5 2.Nf3"
+# def load_meta():
+#     with open(META_PATH, "rb") as f:
+#         return pickle.load(f)
 
-    meta = load_meta()
-    stoi, itos = meta["stoi"], meta["itos"]
 
-    tokenizer = nanogpt_to_hf_transformers.NanogptTokenizer("models/meta.pkl")
+# def test_tokenizer():
+#     test_str = ";1.e4 e5 2.Nf3"
 
-    enc = tokenizer.encode(test_str)
-    enc = torch.tensor(enc).unsqueeze(0)
-    nanogpt_enc = torch.tensor([stoi[c] for c in test_str]).unsqueeze(0)
+#     meta = load_meta()
+#     stoi, itos = meta["stoi"], meta["itos"]
 
-    assert torch.equal(enc, nanogpt_enc)
+#     tokenizer = nanogpt_to_hf_transformers.NanogptTokenizer("models/meta.pkl")
+
+#     enc = tokenizer.encode(test_str)
+#     enc = torch.tensor(enc).unsqueeze(0)
+#     nanogpt_enc = torch.tensor([stoi[c] for c in test_str]).unsqueeze(0)
+
+#     assert torch.equal(enc, nanogpt_enc)
 
 
 # This will test the conversion of a Nanogpt model to a Huggingface model
