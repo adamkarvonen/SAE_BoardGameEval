@@ -12,23 +12,40 @@ import circuits.utils as utils
 
 @dataclass
 class Config:
-    N_GPUS: int = 1
+    N_GPUS: int = 1  # If you increase this `full_pipeline.py` will use all GPUs
     eval_sae_n_inputs: int = 1000
-    batch_size: int = 25
+    batch_size: int = 25  # Reduce this if you run out of memory
     eval_results_n_inputs: int = 1000
     board_reconstruction_n_inputs: int = 1000
+
+    # A feature is a high precision classifier if precision is above the high threshold
     analysis_high_threshold: float = 0.95
+    # Low threshold is currently not used
     analysis_low_threshold: float = 0.1
+    # A feature must fire on at least this many examples to be considered
     analysis_significance_threshold: int = 10
+
+    # If you have already ran the full pipeline and want to skip steps, you can set these to False
+    # If False, they will load the results from the pickle files from the previous run
     run_eval_results: bool = True
     run_eval_sae: bool = True
     run_analysis: bool = True
     run_board_reconstruction: bool = True
+
+    # Saves results.pkl, reconstruction.pkl, and eval_results.pkl
     save_results: bool = True
+    # Feature labels use hundreds of MB of disk and can be computed in seconds from results.pkl
     save_feature_labels: bool = False
+    # Precompute will create both datasets and save them as pickle files
+    # If precompute == False, it creates the dataset on the fly
+    # This is far slower when evaluating multiple SAEs, but for an exploratory run it is fine
     precompute: bool = True
+    # Analysis on CPU significantly reduces peak memory usage and isn't much slower
     analysis_on_cpu: bool = False
     f1_analysis_thresholds = torch.arange(0.0, 1.1, 0.1)
+
+    # You can speed up runtime by commenting out the functions you don't need
+    # All of the functions below will be analyzed in the full pipeline
     othello_functions = [
         othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
         othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
