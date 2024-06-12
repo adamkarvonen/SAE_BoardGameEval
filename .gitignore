@@ -11,6 +11,8 @@ autoencoders/*
 !autoencoders/utils/
 !autoencoders/gen_identity_ae_folders.ipynb
 !autoencoders/download_saes.sh
+!autoencoders/chess_mlp_acts_identity_aes/
+!autoencoders/othello_mlp_acts_identity_aes/
 
 # Ignore all directories under analysis/
 analysis/*/

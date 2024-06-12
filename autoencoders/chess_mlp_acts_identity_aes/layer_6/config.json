@@ -1,0 +1,16 @@
+{
+    "trainer": {
+        "dict_class": "Identity",
+        "trainer_class": "Identity",
+        "layer": 6,
+        "activation_dim": 2048,
+        "dict_size": 2048,
+        "lm_name": "adamkarvonen/8LayerChessGPT2"
+    },
+    "buffer": {
+        "d_submodule": 2048,
+        "io": "out",
+        "ctx_len": 256,
+        "device": "cuda:0"
+    }
+}
