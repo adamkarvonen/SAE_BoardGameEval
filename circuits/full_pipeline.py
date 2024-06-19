@@ -526,6 +526,15 @@ chess_groups = [
     (chess_all_layers_group_paths, chess_all_layers_output_path),
 ]
 
+othello_test_path = ["autoencoders/testing_othello/"]
+othello_test_output_path = "autoencoders/testing_othello/results.csv"
+
+chess_test_path = ["autoencoders/testing_chess/"]
+chess_test_output_path = "autoencoders/testing_chess/results.csv"
+
+othello_groups = [(othello_test_path, othello_test_output_path)]
+chess_groups = [(chess_test_path, chess_test_output_path)]
+
 if __name__ == "__main__":
     groups = othello_groups
     main_config = p_config.Config()
