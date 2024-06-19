@@ -37,3 +37,20 @@ transformer_lens==1.17.0
 # pytest == 8.1.1
 # transformers == 4.39.3
 # wandb == 0.16.6
+
+# If running into dependency issues, these exact versions worked on Python 3.12
+
+# # circuitvis not required
+# datasets == 2.19.1
+# einops == 0.8.0
+# matplotlib == 3.8.4
+# nnsight == 0.2.19
+# pandas == 2.2.2
+# plotly == 5.22.0
+# torch == 2.3.0
+# tqdm == 4.66.4
+# # umap learn not required
+# zstandard == 0.22.0
+# pytest == 8.2.2
+# transformers == 4.40.0
+# wandb == 0.16.6
