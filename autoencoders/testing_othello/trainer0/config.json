@@ -1,0 +1,32 @@
+{
+    "trainer": {
+        "trainer_class": "PAnnealTrainer",
+        "dict_class": "AutoEncoder",
+        "activation_dim": 512,
+        "dict_size": 4096,
+        "lr": 0.0003162277571391314,
+        "sparsity_function": "Lp^p",
+        "sparsity_penalty": 0.03162277489900589,
+        "p_start": 1,
+        "p_end": 0.2,
+        "anneal_start": 1000,
+        "sparsity_queue_length": 10,
+        "n_sparsity_updates": 10,
+        "warmup_steps": 1000,
+        "resample_steps": null,
+        "steps": 36621,
+        "seed": 42,
+        "layer": 5,
+        "lm_name": "Baidicoot/Othello-GPT-Transformer-Lens",
+        "wandb_name": "PAnnealTrainer-othello"
+    },
+    "buffer": {
+        "d_submodule": 512,
+        "io": "out",
+        "n_ctxs": 30000,
+        "ctx_len": 59,
+        "refresh_batch_size": 128,
+        "out_batch_size": 8192,
+        "device": "cuda:0"
+    }
+}

@@ -14,6 +14,21 @@ autoencoders/*
 !autoencoders/chess_mlp_acts_identity_aes/
 !autoencoders/othello_mlp_acts_identity_aes/
 
+# Un-ignore directories but ignore their contents by default
+!autoencoders/testing_othello/
+autoencoders/testing_othello/*
+!autoencoders/testing_othello/trainer0/
+autoencoders/testing_othello/trainer0/*
+!autoencoders/testing_othello/trainer0/ae.pt
+!autoencoders/testing_othello/trainer0/config.json
+
+!autoencoders/testing_chess/
+autoencoders/testing_chess/*
+!autoencoders/testing_chess/trainer4/
+autoencoders/testing_chess/trainer4/*
+!autoencoders/testing_chess/trainer4/ae.pt
+!autoencoders/testing_chess/trainer4/config.json
+
 # Ignore all directories under analysis/
 analysis/*/
 

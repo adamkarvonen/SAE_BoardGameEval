@@ -1,0 +1,32 @@
+{
+    "trainer": {
+        "trainer_class": "PAnnealTrainer",
+        "dict_class": "AutoEncoder",
+        "activation_dim": 512,
+        "dict_size": 4096,
+        "lr": 0.0003,
+        "sparsity_function": "Lp^p",
+        "sparsity_penalty": 0.03263157606124878,
+        "p_start": 1,
+        "p_end": 0.2,
+        "anneal_start": 10000,
+        "sparsity_queue_length": 10,
+        "n_sparsity_updates": 10,
+        "warmup_steps": 1000,
+        "resample_steps": null,
+        "steps": 36621,
+        "seed": 42,
+        "layer": 5,
+        "lm_name": "adamkarvonen/8LayerChessGPT2",
+        "wandb_name": "PAnnealTrainer-chess-4"
+    },
+    "buffer": {
+        "d_submodule": 512,
+        "io": "out",
+        "n_ctxs": 1000.0,
+        "ctx_len": 256,
+        "refresh_batch_size": 64,
+        "out_batch_size": 8192,
+        "device": "cuda:0"
+    }
+}
