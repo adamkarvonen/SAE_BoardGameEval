@@ -1,34 +1,12 @@
 #!/bin/bash
 
-# Check if unzip is installed, and exit if it isn't
-if ! command -v unzip &> /dev/null
-then
-    echo "Error: unzip is not installed. Please install it and rerun the setup script."
-    exit 1
-fi
-
 pip install -r requirements.txt
 pip install -e .
 git submodule update --init
 
-cd autoencoders
-
-wget -O group1.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group1.zip?download=true"
-unzip group1.zip
-rm group1.zip
-
-cd ..
-
-cd analysis
-
-wget -O group1_results.zip "https://huggingface.co/adamkarvonen/chess_saes/resolve/main/group1_results.zip?download=true"
-unzip group1_results.zip
-rm group1_results.zip
-
-cd ..
-
 cd circuits
 cd dictionary_learning
-
+git pull
 git checkout collab
+# confirmed working with dictionary_learning commit 113c042101b6df6de60b04c7e65116c3a9460904
 git pull

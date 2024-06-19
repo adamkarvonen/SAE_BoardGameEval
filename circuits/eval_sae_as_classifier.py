@@ -5,41 +5,19 @@ import einops
 from datasets import load_dataset
 from typing import Callable, Optional
 import math
-import os
-import itertools
 import json
-import time
 
 from circuits.utils import (
     get_ae_bundle,
     collect_activations_batch,
-    get_model_activations,
-    get_feature_activations_batch,
     get_nested_folders,
     get_firing_features,
     to_device,
     AutoEncoderBundle,
-    SubmoduleType,
 )
 import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
 import circuits.othello_engine_utils as othello_engine_utils
-
-from circuits.dictionary_learning.evaluation import evaluate
-
-from IPython import embed
-
-# Dimension key (from https://medium.com/@NoamShazeer/shape-suffixes-good-coding-style-f836e72e24fd):
-# F  = features and minibatch size depending on the context (maybe this is stupid)
-# B = batch_size
-# L = seq length (context length)
-# T = thresholds
-# R = rows (or cols)
-# C = classes for one hot encoding
-#
-# (rangell): feel free to change these if it doesn't make sense or fall in line with the spirit of the key
-# D = activation dimension
-# A = all (as opposed to batch B)
 
 
 def print_tensor_memory_usage(tensor):
@@ -63,7 +41,6 @@ def construct_chess_dataset(
     custom_functions: list[Callable],
     n_inputs: int,
     split: str,
-    models_path: str = "models/",
     max_str_length: int = 256,
     device: str = "cpu",
     precompute_dataset: bool = True,
@@ -73,45 +50,42 @@ def construct_chess_dataset(
         streaming=False,
     )
 
-    meta_path = models_path + "meta.pkl"
+    meta = chess_utils.load_chess_meta()
 
-    with open(meta_path, "rb") as f:
-        meta = pickle.load(f)
-
-    pgn_strings = []
-    encoded_inputs = []
-    for i, example in enumerate(dataset[split]):
+    pgn_strings_bL = []
+    encoded_inputs_bL = []
+    for i, example in enumerate(dataset[split]["text"]):
         if i >= n_inputs:
             break
-        pgn_string = example["text"][:max_str_length]
-        pgn_strings.append(pgn_string)
+        pgn_string = example[:max_str_length]
+        pgn_strings_bL.append(pgn_string)
         encoded_input = chess_utils.encode_string(meta, pgn_string)
-        encoded_inputs.append(encoded_input)
+        encoded_inputs_bL.append(encoded_input)
 
     data = {}
-    data["decoded_inputs"] = pgn_strings
-    data["encoded_inputs"] = encoded_inputs
+    data["decoded_inputs"] = pgn_strings_bL
+    data["encoded_inputs"] = encoded_inputs_bL
 
     if not precompute_dataset:
         return data
 
-    state_stack_dict_BLRR = chess_utils.create_state_stacks(
-        pgn_strings, custom_functions, device, show_progress=True
+    state_stack_dict_bLRR = chess_utils.create_state_stacks(
+        pgn_strings_bL, custom_functions, device, show_progress=True
     )
 
-    for func_name in state_stack_dict_BLRR:
+    for func_name in state_stack_dict_bLRR:
         config = chess_utils.config_lookup[func_name]
-        state_stack_BLRR = state_stack_dict_BLRR[func_name]
+        state_stack_bLRR = state_stack_dict_bLRR[func_name]
 
-        assert state_stack_BLRR.shape[0] == len(pgn_strings)
-        assert state_stack_BLRR.shape[1] == max_str_length
+        assert state_stack_bLRR.shape[0] == len(pgn_strings_bL)
+        assert state_stack_bLRR.shape[1] == max_str_length
 
-        one_hot_BLRRC = chess_utils.state_stack_to_one_hot(config, device, state_stack_BLRR)
+        one_hot_bLRRC = chess_utils.state_stack_to_one_hot(config, device, state_stack_bLRR)
 
         print(func_name)
-        print_tensor_memory_usage(one_hot_BLRRC)
+        print_tensor_memory_usage(one_hot_bLRRC)
 
-        data[func_name] = one_hot_BLRRC
+        data[func_name] = one_hot_bLRRC
 
     return data
 
@@ -125,19 +99,19 @@ def construct_othello_dataset(
     precompute_dataset: bool = True,
 ) -> dict:
     dataset = load_dataset("adamkarvonen/othello_45MB_games", streaming=False)
-    encoded_othello_inputs = []
-    decoded_othello_inputs = []
+    encoded_othello_inputs_bL = []
+    decoded_othello_inputs_bL = []
     for i, example in enumerate(dataset[split]):
         if i >= n_inputs:
             break
         encoded_input = example["tokens"][:max_str_length]
         decoded_input = othello_engine_utils.to_string(encoded_input)
-        encoded_othello_inputs.append(encoded_input)
-        decoded_othello_inputs.append(decoded_input)
+        encoded_othello_inputs_bL.append(encoded_input)
+        decoded_othello_inputs_bL.append(decoded_input)
 
     data = {}
-    data["encoded_inputs"] = encoded_othello_inputs
-    data["decoded_inputs"] = decoded_othello_inputs
+    data["encoded_inputs"] = encoded_othello_inputs_bL
+    data["decoded_inputs"] = decoded_othello_inputs_bL
 
     if not precompute_dataset:
         return data
@@ -145,7 +119,7 @@ def construct_othello_dataset(
     for custom_function in custom_functions:
         print(f"Precomputing {custom_function.__name__}...")
         func_name = custom_function.__name__
-        data[func_name] = custom_function(decoded_othello_inputs)
+        data[func_name] = custom_function(decoded_othello_inputs_bL)
 
     return data
 
@@ -308,7 +282,7 @@ def normalize_tracker(
 
 # TODO Write a unit test for this function
 def apply_indexing_function(
-    pgn_strings: list[str],
+    pgn_strings_bL: list[str],
     activations_FBL: torch.Tensor,
     batch_data: dict[str, torch.Tensor],
     device: torch.device,
@@ -320,7 +294,7 @@ def apply_indexing_function(
     max_indices = 20
 
     custom_indices = []
-    for pgn in pgn_strings:
+    for pgn in pgn_strings_bL:
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
@@ -345,7 +319,7 @@ def apply_indexing_function(
 
 
 def compute_custom_indices(
-    pgn_strings: list[str],
+    pgn_strings_bL: list[str],
     indexing_function: Callable,
     num_active_features: int,
     device: str,
@@ -354,7 +328,7 @@ def compute_custom_indices(
     max_indices = 20
 
     custom_indices = []
-    for pgn in pgn_strings:
+    for pgn in pgn_strings_bL:
         dots_indices = indexing_function(pgn)
         custom_indices.append(dots_indices[:max_indices])
 
@@ -391,13 +365,10 @@ def filter_data_by_custom_indices(
 def prep_data_ae_buffer_and_model(
     autoencoder_path: str,
     batch_size: int,
-    model_path: str,
-    model_name: str,
     data: dict,
     device: torch.device,
     n_inputs: int,
-    othello: bool = False,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
+    include_buffer: bool = True,
 ) -> tuple[dict, AutoEncoderBundle, list[str], torch.Tensor]:
     """Moves data from the data dictionary into the NNsight activation buffer.
     We also load the autoencoder and model, and move them to the device.
@@ -408,12 +379,12 @@ def prep_data_ae_buffer_and_model(
             continue
         data[key] = data[key].to(device)
 
-    pgn_strings = data["decoded_inputs"]
-    encoded_inputs = data["encoded_inputs"]
+    pgn_strings_bL = data["decoded_inputs"]
+    encoded_inputs_bL = data["encoded_inputs"]
     del data["decoded_inputs"]
     del data["encoded_inputs"]
 
-    activation_buffer_data = iter(encoded_inputs)
+    activation_buffer_data = iter(encoded_inputs_bL)
     n_ctxs = min(512, n_inputs)
 
     ae_bundle = get_ae_bundle(
@@ -421,14 +392,12 @@ def prep_data_ae_buffer_and_model(
         device,
         activation_buffer_data,
         batch_size,
-        model_path,
-        model_name,
         n_ctxs,
-        submodule_type,
+        include_buffer=include_buffer,
     )
     ae_bundle.ae = ae_bundle.ae.to(device)
 
-    return data, ae_bundle, pgn_strings, encoded_inputs
+    return data, ae_bundle, pgn_strings_bL, encoded_inputs_bL
 
 
 def get_output_location(
@@ -444,14 +413,12 @@ def aggregate_statistics(
     n_inputs: int,
     batch_size: int,
     device: torch.device,
-    model_path: str,
-    model_name: str,
     data: dict,
+    thresholds_T: torch.Tensor,
     indexing_function: Optional[Callable] = None,
     othello: bool = False,
     save_results: bool = True,
     precomputed: bool = True,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
 ) -> dict:
     """For every input, for every feature, call `aggregate_batch_statistics()`.
     As an example of desired behavior, view tests/test_classifier_eval.py.
@@ -462,54 +429,49 @@ def aggregate_statistics(
     feature_batch_size = batch_size
     indexing_function_name = get_indexing_function_name(indexing_function)
 
-    data, ae_bundle, pgn_strings, encoded_inputs = prep_data_ae_buffer_and_model(
+    data, ae_bundle, pgn_strings_bL, encoded_inputs_bL = prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
-        model_path,
-        model_name,
         data,
         device,
         n_inputs,
-        othello,
-        submodule_type,
     )
 
     firing_rate_n_inputs = min(int(n_inputs * 0.5), 1000) * ae_bundle.context_length
 
     torch.manual_seed(0)  # For reproducibility
-    alive_features_F, max_activations_F = get_firing_features(
+    alive_features_f, max_activations_f = get_firing_features(
         ae_bundle, firing_rate_n_inputs, batch_size, device
     )
     ae_bundle.buffer = None
 
     if indexing_function is not None:
         custom_indices_AI = compute_custom_indices(
-            pgn_strings, indexing_function, alive_features_F.shape[0], device
+            pgn_strings_bL, indexing_function, alive_features_f.shape[0], device
         )
 
-    num_features = len(alive_features_F)
+    num_features = len(alive_features_f)
     print(
         f"Out of {ae_bundle.dictionary_size} features, on {firing_rate_n_inputs} activations, {num_features} are alive."
     )
 
-    assert len(pgn_strings) >= n_inputs
+    assert len(pgn_strings_bL) >= n_inputs
     assert n_inputs % batch_size == 0
 
     n_iters = n_inputs // batch_size
     # We round up to ensure we don't ignore the remainder of features
     num_feature_iters = math.ceil(num_features / feature_batch_size)
 
-    thresholds_T = torch.arange(0.0, 1.1, 0.1).to(device)
-    thresholds_TF11 = einops.repeat(thresholds_T, "T -> T F 1 1", F=num_features)
-    max_activations_1F11 = einops.repeat(max_activations_F, "F -> 1 F 1 1")
+    thresholds_TF11 = einops.repeat(thresholds_T, "T -> T F 1 1", F=num_features).to(device)
+    max_activations_1F11 = einops.repeat(max_activations_f, "F -> 1 F 1 1")
     thresholds_TF11 = thresholds_TF11 * max_activations_1F11
 
-    results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_F, device)
+    results = initialize_results_dict(custom_functions, len(thresholds_T), alive_features_f, device)
 
     for i in tqdm(range(n_iters), desc="Aggregating statistics"):
         start = i * batch_size
         end = (i + 1) * batch_size
-        pgn_strings_BL = pgn_strings[start:end]
+        pgn_strings_BL = pgn_strings_bL[start:end]
         batch_data = get_data_batch(
             data,
             pgn_strings_BL,
@@ -521,15 +483,15 @@ def aggregate_statistics(
             othello=othello,
         )
 
-        encoded_inputs_BL = torch.tensor(encoded_inputs[start:end]).to(device)
-        all_activations_FBL, tokens = collect_activations_batch(
-            ae_bundle, encoded_inputs_BL, alive_features_F
+        encoded_inputs_BL = torch.tensor(encoded_inputs_bL[start:end]).to(device)
+        all_activations_fBL, tokens = collect_activations_batch(
+            ae_bundle, encoded_inputs_BL, alive_features_f
         )
 
         if indexing_function is not None:
             custom_indices_BI = custom_indices_AI[start:end]
-            all_activations_FBL, batch_data = filter_data_by_custom_indices(
-                all_activations_FBL, batch_data, custom_indices_BI, device
+            all_activations_fBL, batch_data = filter_data_by_custom_indices(
+                all_activations_fBL, batch_data, custom_indices_BI, device
             )
 
         results = update_all_tracker(results, custom_functions, batch_data, device)
@@ -539,11 +501,7 @@ def aggregate_statistics(
             f_end = min((feature + 1) * feature_batch_size, num_features)
             f_batch_size = f_end - f_start
 
-            activations_FBL = all_activations_FBL[
-                f_start:f_end
-            ]  # NOTE: Now F == feature_batch_size
-            # Maybe that's stupid and inconsistent and I should use a new letter for annotations
-            # I'll roll with it for now
+            activations_FBL = all_activations_fBL[f_start:f_end]
 
             results = aggregate_batch_statistics(
                 results,
@@ -588,18 +546,18 @@ def check_if_autoencoder_is_othello(autoencoder_group_path: str) -> bool:
     for folder in folders:
         with open(folder + "config.json", "r") as f:
             config = json.load(f)
-        if config["buffer"]["ctx_len"] == 59:
+        model_name = config["trainer"]["lm_name"]
+        if (
+            model_name == "adamkarvonen/RandomWeights8LayerOthelloGPT2"
+            or model_name == "Baidicoot/Othello-GPT-Transformer-Lens"
+        ):
             return True
-        elif config["buffer"]["ctx_len"] == 256:
+        if (
+            model_name == "adamkarvonen/RandomWeights8LayerChessGPT2"
+            or model_name == "adamkarvonen/8LayerChessGPT2"
+        ):
             return False
     raise ValueError("Could not determine if autoencoder is for Othello or Chess.")
-
-
-def get_model_name(othello: bool) -> str:
-    if othello:
-        return "Baidicoot/Othello-GPT-Transformer-Lens"
-    else:
-        return "adamkarvonen/8LayerChessGPT2"
 
 
 def construct_dataset(
@@ -608,7 +566,6 @@ def construct_dataset(
     n_inputs: int,
     split: str,
     device: str,
-    models_path: str = "models/",
     precompute_dataset: bool = True,
 ) -> dict:
     """Constructs the dataset for either Othello or Chess.
@@ -620,7 +577,6 @@ def construct_dataset(
             n_inputs,
             split=split,
             device=device,
-            models_path=models_path,
             precompute_dataset=precompute_dataset,
         )
     else:
@@ -635,125 +591,9 @@ def construct_dataset(
     return data
 
 
-def get_recommended_custom_functions(othello: bool) -> list[Callable]:
-    if not othello:
-        return get_all_chess_functions(othello)
-        custom_functions = [chess_utils.board_to_piece_state, chess_utils.board_to_pin_state]
-    else:
-        custom_functions = [
-            othello_utils.games_batch_to_state_stack_mine_yours_BLRRC,
-            othello_utils.games_batch_to_state_stack_mine_yours_blank_mask_BLRRC,
-            othello_utils.games_batch_to_valid_moves_BLRRC,
-            othello_utils.games_batch_to_state_stack_lines_mine_BLRCC,
-            othello_utils.games_batch_to_state_stack_length_lines_mine_BLRCC,
-            othello_utils.games_batch_to_state_stack_opponent_length_lines_mine_BLRCC,
-            # othello_utils.games_batch_to_state_stack_lines_yours_BLRCC,
-        ]
-    return custom_functions
-
-
-def get_all_chess_functions(othello: bool) -> list[Callable]:
-    if othello:
-        raise ValueError("This is a chess function")
-    custom_functions = [
-        chess_utils.board_to_piece_state,
-        chess_utils.board_to_piece_masked_blank_state,
-        chess_utils.board_to_piece_masked_blank_and_initial_state,
-        chess_utils.board_to_piece_color_state,
-        chess_utils.board_to_pin_state,
-        chess_utils.board_to_threat_state,
-        chess_utils.board_to_check_state,
-        chess_utils.board_to_legal_moves_state,
-        chess_utils.board_to_specific_fork,
-        chess_utils.board_to_any_fork,
-        chess_utils.board_to_has_castling_rights,
-        chess_utils.board_to_has_queenside_castling_rights,
-        chess_utils.board_to_has_kingside_castling_rights,
-        chess_utils.board_to_has_legal_en_passant,
-        chess_utils.board_to_pseudo_legal_moves_state,
-        chess_utils.board_to_can_claim_draw,
-        chess_utils.board_to_can_check_next,
-        chess_utils.board_to_has_bishop_pair,
-        chess_utils.board_to_has_mate_threat,
-        chess_utils.board_to_can_capture_queen,
-        chess_utils.board_to_has_queen,
-        chess_utils.board_to_has_connected_rooks,
-        chess_utils.board_to_ambiguous_moves,
-    ]
-    return custom_functions
-
-
 def get_recommended_indexing_functions(othello: bool) -> list[Callable]:
     if not othello:
         indexing_functions = [chess_utils.find_dots_indices]
     else:
         indexing_functions = [None]
     return indexing_functions
-
-
-def eval_sae_group(
-    autoencoder_group_paths: list[str],
-    device: str = "cuda",
-    batch_size: int = 10,
-    n_inputs: int = 1000,
-):
-    """Example autoencoder_group_paths = ['autoencoders/othello_layer5_ef4/'].
-    At batch_size == 10, it uses around 2GB of VRAM.
-    VRAM does not scale with n_inputs, only batch_size.
-
-    Returns a dictionary with autoencoder_group_path as key and a list of output locations as value.
-    """
-    model_path = "unused"
-
-    # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
-    othello = check_if_autoencoder_is_othello(autoencoder_group_paths[0])
-
-    indexing_functions = get_recommended_indexing_functions(othello)
-    custom_functions = get_recommended_custom_functions(othello)
-
-    param_combinations = list(itertools.product(autoencoder_group_paths, indexing_functions))
-
-    print("Constructing evaluation dataset...")
-
-    model_name = get_model_name(othello)
-    data = construct_dataset(othello, custom_functions, n_inputs, split="train", device=device)
-
-    print("Starting evaluation...")
-
-    for autoencoder_group_path, indexing_function in param_combinations:
-        print(f"Autoencoder group path: {autoencoder_group_path}")
-        indexing_function_name = get_indexing_function_name(indexing_function)
-
-        print(f"Indexing function: {indexing_function_name}")
-
-        folders = get_nested_folders(autoencoder_group_path)
-
-        for autoencoder_path in folders:
-            print("Evaluating autoencoder:", autoencoder_path)
-
-            results = aggregate_statistics(
-                custom_functions,
-                autoencoder_path,
-                n_inputs,
-                batch_size,
-                device,
-                model_path,
-                model_name,
-                data.copy(),
-                indexing_function=indexing_function,
-                othello=othello,
-            )
-
-
-if __name__ == "__main__":
-    # autoencoder_group_paths = ["autoencoders/group1/", "autoencoders/chess_layer_0_subset/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/", "autoencoders/othello_layer0/"]
-    autoencoder_group_paths = ["autoencoders/chess_layer5_large_sweep/"]
-    autoencoder_group_paths = ["autoencoders/othello_layer5_ef4/"]
-    autoencoder_group_paths = ["autoencoders/group-2024-05-07/"]
-
-    eval_sae_group(
-        autoencoder_group_paths,
-        batch_size=100,
-        n_inputs=1000,
-    )

@@ -1,12 +1,7 @@
 import torch
 import pickle
 import einops
-import importlib
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import plotly.express as px
-from matplotlib.colors import Normalize
 from typing import Callable
 import json
 
@@ -14,27 +9,6 @@ import circuits.analysis as analysis
 import circuits.eval_sae_as_classifier as eval_sae
 import circuits.chess_utils as chess_utils
 import circuits.utils as utils
-
-
-def mask_all_blanks(results: dict, device) -> dict:
-    custom_functions = analysis.get_all_custom_functions(results)
-    for function in custom_functions:
-        function_name = function.__name__
-
-        if (
-            function == chess_utils.board_to_piece_state
-            or function == chess_utils.board_to_piece_color_state
-        ):
-            on_TFRRC = results[function_name]["on"]
-            off_TFRRC = results[function_name]["off"]
-            results[function_name]["on"] = analysis.mask_initial_board_state(
-                on_TFRRC, function, device
-            )
-            results[function_name]["off"] = analysis.mask_initial_board_state(
-                off_TFRRC, function, device
-            )
-
-    return results
 
 
 def best_f1_average(f1_TFRRC: torch.Tensor, config: chess_utils.Config) -> torch.Tensor:
@@ -134,7 +108,6 @@ def get_all_sae_f1_results(
     custom_function_names: list[str],
     device: str,
     thresholds: list[float],
-    mask: bool,
 ) -> dict:
     all_sae_results = {}
 
@@ -180,7 +153,6 @@ def get_all_sae_f1_results(
             #     low_threshold=0.1,
             #     significance_threshold=10,
             #     save_results=False,
-            #     mask=mask,
             #     verbose=False,
             #     print_results=False,
             # )
@@ -435,7 +407,6 @@ def complete_analysis_pipeline(
     device: str,
     thresholds: list[float],
 ) -> str:
-    mask = False
     df = pd.read_csv(csv_results_path)
 
     custom_functions = get_custom_functions(
@@ -451,7 +422,6 @@ def complete_analysis_pipeline(
         custom_function_names,
         device,
         thresholds,
-        mask,
     )
     df = update_dataframe_with_results(
         df, all_sae_results, custom_function_names, autoencoder_group_paths, thresholds

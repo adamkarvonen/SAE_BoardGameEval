@@ -2,7 +2,6 @@ import pickle
 import torch
 from typing import Callable
 import einops
-import chess
 import os
 from typing import Optional
 
@@ -10,8 +9,6 @@ import circuits.chess_utils as chess_utils
 import circuits.othello_utils as othello_utils
 from circuits.utils import to_device, get_nested_folders
 from circuits.eval_sae_as_classifier import normalize_tracker
-
-from IPython import embed
 
 
 def get_all_results_file_names(folder_name: str, filter: Optional[str]) -> list[str]:
@@ -266,51 +263,6 @@ def transform_board_from_piece_color_to_piece(board: torch.Tensor) -> torch.Tens
     return new_board
 
 
-def mask_initial_board_state(
-    on_tracker_TFRRC: torch.Tensor,
-    custom_function: Callable,
-    device: torch.device,
-    mine_state: bool = False,
-) -> torch.Tensor:
-
-    raise ValueError(
-        "Masking has been mostly deprecated. In general, I recommend setting mask to False."
-    )
-
-    if custom_function == chess_utils.board_to_piece_state:
-        T, F, R1, R2, C = on_tracker_TFRRC.shape
-        config = chess_utils.config_lookup[custom_function.__name__]
-
-        initial_board = chess.Board()
-        initial_state_RR = custom_function(initial_board)
-        initial_state_11RR = einops.rearrange(initial_state_RR, "R1 R2 -> 1 1 R1 R2")
-        initial_one_hot_11RRC = chess_utils.state_stack_to_one_hot(
-            config, device, initial_state_11RR
-        )
-        initial_one_hot_RRC = einops.rearrange(initial_one_hot_11RRC, "1 1 R1 R2 C -> R1 R2 C")
-
-        if mine_state:
-            initial_one_hot_RRC = transform_board_from_piece_color_to_piece(initial_one_hot_RRC)
-
-        mask_RRC = initial_one_hot_RRC == 1
-        mask_TFRRC = einops.repeat(mask_RRC, "R1 R2 C -> T F R1 R2 C", T=T, F=F)
-        on_tracker_TFRRC[mask_TFRRC] = 0
-
-    if custom_function == chess_utils.board_to_piece_state:
-        # Optionally, we also mask off the blank class
-        on_tracker_TFRRC[:, :, :, :, 6] = 0
-    if custom_function == chess_utils.board_to_piece_color_state:
-        on_tracker_TFRRC[:, :, :, :, 1] = 0
-
-    if (
-        custom_function == othello_utils.games_batch_to_state_stack_mine_yours_BLRRC
-        or custom_function == othello_utils.games_batch_to_state_stack_BLRRC
-    ):
-        on_tracker_TFRRC[:, :, :, :, 1] = 0
-
-    return on_tracker_TFRRC
-
-
 def get_summary_board(
     above_counts_T: torch.Tensor, above_counts_TFRRC: torch.Tensor, original_shape: tuple[int]
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
@@ -386,7 +338,6 @@ def analyze_board_tracker(
     significance_threshold: int,
     misc_stats: dict,
     mine_state: bool = False,
-    mask: bool = False,
     print_results: bool = True,
     verbose: bool = False,
 ) -> tuple[torch.Tensor, dict]:
@@ -410,14 +361,6 @@ def analyze_board_tracker(
     original_shape = piece_state_on_TFRRC.shape
 
     piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
-
-    if mask:
-        piece_state_on_TFRRC = mask_initial_board_state(
-            piece_state_on_TFRRC, function, device, mine_state
-        )
-        piece_state_off_counting_TFRRC = mask_initial_board_state(
-            piece_state_off_counting_TFRRC, function, device, mine_state
-        )
 
     (
         above_counts_T,
@@ -523,7 +466,6 @@ def analyze_results_dict(
     verbose: bool = False,
     print_results: bool = True,
     save_results: bool = True,
-    mask: bool = False,
 ) -> tuple[dict, dict]:
 
     custom_functions = get_all_custom_functions(results)
@@ -575,7 +517,6 @@ def analyze_results_dict(
                 low_threshold,
                 significance_threshold,
                 misc_stats,
-                mask=mask,
                 print_results=print_results,
                 verbose=verbose,
             )
@@ -643,9 +584,6 @@ def analyze_sae_group(
 
         for autoencoder_path in folder_names:
             file_names = get_all_results_file_names(autoencoder_path, "feature_labels")
-
-            embed()
-            exit()
 
             for file_name in file_names:
                 if print_results:

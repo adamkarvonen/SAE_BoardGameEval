@@ -1,16 +1,16 @@
 import chess
 import pandas as pd
 import torch
-from torch.nn import functional as F
 from typing import Callable, Optional
 from collections import defaultdict
 from dataclasses import dataclass
 from jaxtyping import Int, Float, jaxtyped
-from beartype import beartype
 from torch import Tensor
 from enum import Enum
 import re
 from tqdm import tqdm
+import pickle
+from importlib import resources
 
 import circuits.othello_utils as othello_utils
 
@@ -49,6 +49,19 @@ DEFAULT_DTYPE = torch.int8
 class PlayerColor(Enum):
     WHITE = "White"
     BLACK = "Black"
+
+
+def load_chess_meta():
+    """
+    Loads the chess nanogpt meta dictionary from the 'resources' directory of the 'circuits' package using the modern `files()` method.
+
+    Returns:
+    - dict: The loaded meta dictionary containing 'stoi' and 'itos'.
+    """
+    resource_path = resources.files("circuits.resources") / "meta.pkl"
+    with resource_path.open("rb") as f:
+        meta = pickle.load(f)
+    return meta
 
 
 def board_to_skill_state(board: chess.Board, skill: float) -> torch.Tensor:
@@ -282,6 +295,7 @@ def board_to_specific_fork(
     else:
         raise ValueError("Perspective must be 'mine' or 'other'")
 
+    high_value_targets = 0
     # Loop through all pieces to find the knights of the given color
     for square in board.pieces(attacker_piece, color):
         if board.is_pinned(color, square):
@@ -289,7 +303,6 @@ def board_to_specific_fork(
             continue
 
         attacks = board.attacks(square)
-        high_value_targets = 0
 
         # Check each attack square to see if it's occupied by a high-value enemy piece
         for attack_square in attacks:
@@ -1097,6 +1110,7 @@ def create_state_stack(
         initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
     # Apply each move to the board
     for move in moves_string.split():
+        # TODO It may be dangerous to fail silently here
         try:
             count += 1
             # Skip move numbers
@@ -1104,14 +1118,14 @@ def create_state_stack(
                 board.push_san(move.split(".")[1])
             else:
                 board.push_san(move)
-
-            for custom_fn in custom_board_to_state_fns:
-                func_name = custom_fn.__name__
-                initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
         except:
             # because all games are truncated to a length, often the last move is partial and invalid
             # so we don't need to log this, as it will happen on most games
             break
+
+        for custom_fn in custom_board_to_state_fns:
+            func_name = custom_fn.__name__
+            initial_states[func_name].append(custom_fn(board, skill).to(dtype=DEFAULT_DTYPE))
 
     # if count % 100 == 0:
     #     pretty_print_state_stack(state)

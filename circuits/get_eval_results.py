@@ -16,12 +16,9 @@ def get_evals(
     n_inputs: int,
     batch_size: int,
     device: torch.device,
-    model_path: str,
-    model_name: str,
     data: dict,
     othello: bool = False,
     save_results: bool = True,
-    submodule_type: utils.SubmoduleType = utils.SubmoduleType.resid_post,
 ) -> dict:
 
     torch.set_grad_enabled(False)
@@ -29,16 +26,14 @@ def get_evals(
     data, ae_bundle, pgn_strings, encoded_inputs = eval_sae.prep_data_ae_buffer_and_model(
         autoencoder_path,
         batch_size,
-        model_path,
-        model_name,
         data,
         device,
         n_inputs,
-        othello,
-        submodule_type,
     )
 
-    if othello:
+    # Hacky way to check if the autoencoder comes from the GPT model Baidicoot/Othello-GPT-Transformer-Lens
+    # If this fails, it will crash and not fail silently
+    if othello and "random" not in autoencoder_path:
         eval_results = evaluate(
             ae_bundle.ae,
             ae_bundle.buffer,
@@ -81,18 +76,14 @@ def get_sae_group_evals(
     eval_inputs: int = 1000,
     batch_size: int = 10,
 ):
-    model_path = "unused"
 
     # IMPORTANT NOTE: This is hacky (checks config 'ctx_len'), and means all autoencoders in the group must be for othello XOR chess
     othello = eval_sae.check_if_autoencoder_is_othello(autoencoder_group_paths[0])
 
     print("Constructing evaluation dataset...")
 
-    custom_functions = []
-
-    model_name = eval_sae.get_model_name(othello)
     data = eval_sae.construct_dataset(
-        othello, custom_functions, split="train", n_inputs=(eval_inputs * 2), device=device
+        othello, [], split="train", n_inputs=(eval_inputs * 2), device=device
     )
 
     print("Starting evaluation...")
@@ -108,8 +99,6 @@ def get_sae_group_evals(
                 eval_inputs,
                 batch_size,
                 device,
-                model_path,
-                model_name,
                 data.copy(),
                 othello=othello,
             )

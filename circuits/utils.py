@@ -12,16 +12,19 @@ from tqdm import tqdm
 from transformers import GPT2LMHeadModel
 from transformer_lens import HookedTransformer
 from enum import Enum
+from typing import Optional
+import pandas as pd
 
 from circuits.dictionary_learning.buffer import NNsightActivationBuffer
 from circuits.chess_utils import encode_string
-from circuits.dictionary_learning import ActivationBuffer
 from circuits.dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
     AutoEncoderNew,
     IdentityDict,
 )
+
+# These imports are required for the current hacky way we are loading SAE classes
 from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
@@ -30,15 +33,12 @@ from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
 from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
-from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
-
-from IPython import embed
 
 
 @dataclass
 class AutoEncoderBundle:
     ae: AutoEncoder
-    buffer: NNsightActivationBuffer
+    buffer: Optional[NNsightActivationBuffer]
     model: NNsight
     activation_dim: int
     dictionary_size: int
@@ -90,7 +90,7 @@ def get_mlp_activations_submodule(model_name: str, layer: int, model: NNsight) -
     raise ValueError("Model not found.")
 
 
-def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
+def get_resid_post_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     if model_name == "Baidicoot/Othello-GPT-Transformer-Lens":
         return model.blocks[layer].hook_resid_post
     if model_name in [
@@ -102,6 +102,27 @@ def get_submodule(model_name: str, layer: int, model: NNsight) -> Any:
     raise ValueError("Model not found.")
 
 
+def get_submodule(
+    model_name: str, layer: int, model: NNsight, submodule_type: Optional[SubmoduleType] = None
+) -> Any:
+    if submodule_type is None or submodule_type == SubmoduleType.resid_post:
+        return get_resid_post_submodule(model_name, layer, model)
+    elif submodule_type == SubmoduleType.mlp_act:
+        return get_mlp_activations_submodule(model_name, layer, model)
+    else:
+        raise ValueError("submodule_type not recognized")
+
+
+def concatenate_csv_files(file_list: list[str], output_file: str):
+    # Load and concatenate the CSV files
+    dataframes = [pd.read_csv(file) for file in file_list]
+    concatenated_df = pd.concat(dataframes)
+
+    # Save the concatenated data frame to a new CSV file
+    concatenated_df.to_csv(output_file, index=False)
+    print(f"Concatenated data saved to {output_file}")
+
+
 def get_identity_autoencoder(config: dict) -> IdentityDict:
     """The identity autoencoder just returns activations as is. We can use this to run the full pipeline
     on GPT activations rather than autoencoder activations.
@@ -109,7 +130,7 @@ def get_identity_autoencoder(config: dict) -> IdentityDict:
     Then, in full_pipeline.ipynb, set:
     autoencoder_group_paths = ["../autoencoders/chess_mlp_acts_identity_aes/"]
     csv_output_path = "../autoencoders/chess_mlp_acts_identity_aes/results.csv"
-    submodule_type = SubmoduleType.mlp_act"""
+    """
     ae = IdentityDict()
     ae.activation_dim = config["trainer"]["activation_dim"]
     ae.dict_size = config["trainer"]["dict_size"]
@@ -121,10 +142,8 @@ def get_ae_bundle(
     device: torch.device,
     data: Any,  # iter of list of ints
     batch_size: int,
-    model_path: str = "models/",
-    model_name: str = "adamkarvonen/8LayerChessGPT2",
     n_ctxs: int = 512,
-    submodule_type: SubmoduleType = SubmoduleType.resid_post,
+    include_buffer: bool = True,
 ) -> AutoEncoderBundle:
     autoencoder_model_path = f"{autoencoder_path}ae.pt"
     autoencoder_config_path = f"{autoencoder_path}config.json"
@@ -157,8 +176,7 @@ def get_ae_bundle(
         ).ae.__class__.from_pretrained(autoencoder_model_path, device=device)
         ae = ae.to(device)
 
-    _model_name = config["trainer"]["lm_name"]
-    assert model_name == _model_name
+    model_name = config["trainer"]["lm_name"]
 
     layer = config["trainer"]["layer"]
 
@@ -192,29 +210,34 @@ def get_ae_bundle(
 
     model = get_model(model_name, device)
 
-    if submodule_type == submodule_type.resid_post:
-        assert activation_dim == 512
-        submodule = get_submodule(model_name, layer, model)
-    elif submodule_type == submodule_type.mlp_act:
-        assert activation_dim == 512 * 4
-        submodule = get_mlp_activations_submodule(model_name, layer, model)
+    if activation_dim == 512:
+        submodule_type = SubmoduleType.resid_post
+        print("Using resid_post submodule")
+    elif activation_dim == 512 * 4:
+        submodule_type = SubmoduleType.mlp_act
+        print("Using mlp_act submodule")
     else:
-        raise ValueError("submodule_type not recognized")
+        raise ValueError("activation_dim not recognized")
+
+    submodule = get_submodule(model_name, layer, model, submodule_type)
 
     context_length = config["buffer"]["ctx_len"]
 
-    buffer = NNsightActivationBuffer(
-        data,
-        model,
-        submodule,
-        n_ctxs=n_ctxs,
-        ctx_len=context_length,
-        refresh_batch_size=batch_size,
-        io="out",
-        d_submodule=activation_dim,
-        device=device,
-        out_batch_size=batch_size,
-    )
+    if include_buffer:
+        buffer = NNsightActivationBuffer(
+            data,
+            model,
+            submodule,
+            n_ctxs=n_ctxs,
+            ctx_len=context_length,
+            refresh_batch_size=batch_size,
+            io="out",
+            d_submodule=activation_dim,
+            device=device,
+            out_batch_size=batch_size,
+        )
+    else:
+        buffer = None
 
     return AutoEncoderBundle(
         ae=ae,
@@ -288,6 +311,9 @@ def get_firing_features(
 
     alive_indices = torch.nonzero(mask, as_tuple=False).squeeze(-1)
     max_features = max_features[alive_indices]
+
+    # Rarely MLP neurons can have negative max values. This is a simple fix.
+    max_features = torch.abs(max_features)
 
     return alive_indices, max_features
 
@@ -417,3 +443,10 @@ def chess_hf_dataset_to_generator(
             yield encode_string(meta, x["text"][:context_length])
 
     return gen()
+
+
+def get_model_name(othello: bool) -> str:
+    if othello:
+        return "Baidicoot/Othello-GPT-Transformer-Lens"
+    else:
+        return "adamkarvonen/8LayerChessGPT2"
