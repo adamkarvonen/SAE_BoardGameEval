@@ -2,8 +2,9 @@ __pycache__/
 **/.vscode
 wandb/
 .pytest_cache/
-**.pt
-
+**.out
+**.sh
+**.pkl
 autoencoders/*
 
 !autoencoders/README.md
@@ -12,7 +13,7 @@ autoencoders/*
 !autoencoders/gen_identity_ae_folders.ipynb
 !autoencoders/download_saes.sh
 !autoencoders/chess_mlp_acts_identity_aes/
-!autoencoders/othello_mlp_acts_identity_aes/
+# !autoencoders/othello_mlp_acts_identity_aes/ # Commented out as this folder includes full_pipeline evals now
 
 !autoencoders/saved_data/
 
