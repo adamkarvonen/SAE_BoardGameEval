@@ -250,7 +250,7 @@ def games_batch_to_state_stack_lines_mine_BLRCC(batch_str_moves: list[list[int]]
     return t.stack(game_stack, axis=0)
 
 
-def games_batch_to_state_stack_length_lines_mine_BLRCC(
+def games_batch_to_state_stack_length_lines_mine_BLRRC(
     batch_str_moves: list[list[int]],
 ) -> t.Tensor:
 
@@ -275,7 +275,7 @@ def games_batch_to_state_stack_length_lines_mine_BLRCC(
     return t.stack(game_stack, axis=0)
 
 
-def games_batch_to_state_stack_opponent_length_lines_mine_BLRCC(
+def games_batch_to_state_stack_opponent_length_lines_mine_BLRRC(
     batch_str_moves: list[list[int]],
 ) -> t.Tensor:
 
@@ -300,7 +300,7 @@ def games_batch_to_state_stack_opponent_length_lines_mine_BLRCC(
     return t.stack(game_stack, axis=0)
 
 
-def games_batch_to_state_stack_lines_yours_BLRCC(batch_str_moves: list[int]) -> t.Tensor:
+def games_batch_to_state_stack_lines_yours_BLRRC(batch_str_moves: list[int]) -> t.Tensor:
     """Difference is in `if i % 2 == 0:` instead of `if i % 2 == 1:`
     This function seems to be not required as it scores very poorly on board reconstruction"""
 
@@ -329,5 +329,5 @@ othello_functions = [
     games_batch_to_state_stack_mine_yours_blank_mask_BLRRC.__name__,
     games_batch_to_valid_moves_BLRRC.__name__,
     games_batch_to_state_stack_lines_mine_BLRCC.__name__,
-    games_batch_to_state_stack_lines_yours_BLRCC.__name__,
+    games_batch_to_state_stack_lines_yours_BLRRC.__name__,
 ]

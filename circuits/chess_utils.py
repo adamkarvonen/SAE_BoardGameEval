@@ -796,7 +796,7 @@ othello_mine_lines_config = Config(
 othello_yours_lines_config = Config(
     min_val=0,
     max_val=7,
-    custom_board_state_function=othello_utils.games_batch_to_state_stack_lines_yours_BLRCC,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_lines_yours_BLRRC,
     num_rows=8,
     num_cols=8,
 )
@@ -804,7 +804,7 @@ othello_yours_lines_config = Config(
 othello_length_lines_config = Config(
     min_val=0,
     max_val=47,
-    custom_board_state_function=othello_utils.games_batch_to_state_stack_length_lines_mine_BLRCC,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_length_lines_mine_BLRRC,
     num_rows=8,
     num_cols=8,
 )
@@ -812,7 +812,7 @@ othello_length_lines_config = Config(
 othello_opponent_length_lines_config = Config(
     min_val=0,
     max_val=47,
-    custom_board_state_function=othello_utils.games_batch_to_state_stack_opponent_length_lines_mine_BLRCC,
+    custom_board_state_function=othello_utils.games_batch_to_state_stack_opponent_length_lines_mine_BLRRC,
     num_rows=8,
     num_cols=8,
 )
