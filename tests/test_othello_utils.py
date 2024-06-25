@@ -113,7 +113,7 @@ def test_board_to_mine_lines_state():
 def test_board_to_yours_lines_state():
     input = [[19]]
 
-    boards_state_stack = othello_utils.games_batch_to_state_stack_lines_yours_BLRCC(input)
+    boards_state_stack = othello_utils.games_batch_to_state_stack_lines_yours_BLRRC(input)
 
     move_of_interest = 0
 
