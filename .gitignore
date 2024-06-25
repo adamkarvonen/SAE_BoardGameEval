@@ -13,7 +13,7 @@ autoencoders/*
 !autoencoders/gen_identity_ae_folders.ipynb
 !autoencoders/download_saes.sh
 !autoencoders/chess_mlp_acts_identity_aes/
-# !autoencoders/othello_mlp_acts_identity_aes/ # Commented out as this folder includes full_pipeline evals now
+!autoencoders/othello_mlp_acts_identity_aes/
 
 !autoencoders/saved_data/
 
@@ -52,5 +52,4 @@ circuits/run_othello_sae_trainer.sh
 circuits/run_chess_sae_trainer.sh
 circuits/nohup.out
 circuits/chess_sae_trainer.py
-circuits/full_pipeline_can*
 circuits/*.pkl
