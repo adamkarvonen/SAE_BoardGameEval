@@ -6,7 +6,7 @@ import pickle
 
 from nnsight import LanguageModel
 
-from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
+#from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 from circuits.utils import (
     chess_hf_dataset_to_generator,
     othello_hf_dataset_to_generator,
@@ -21,6 +21,7 @@ from dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from dictionary_learning.trainers.gdm import GatedSAETrainer
 from dictionary_learning.trainers.jump import JumpSAETrainer
 from dictionary_learning.trainers.standard_new import StandardTrainerNew
+from dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
 from dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
 from dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
 from dictionary_learning.dictionary import (
@@ -41,7 +42,7 @@ def get_args():
                         required=True, help="data and model and context length to run on")
     parser.add_argument("--layer", type=int, required=True,
                         help="which residual stream layer to gather activations from")
-    parser.add_argument("--trainer_type", type=str, choices=["standard", "p_anneal", "gated", "gated_anneal"],
+    parser.add_argument("--trainer_type", type=str, choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k"],
                         required=True, help="run sweep on this trainer")
     parser.add_argument("--save_dir", type=str, required=True,
                         help="where to store sweep")
@@ -61,7 +62,7 @@ def run_sae_batch(
         dry_run : bool = False
 ):
     if not othello:
-        with open("models/meta.pkl", "rb") as f:
+        with open("circuits/resources/meta.pkl", "rb") as f:
             meta = pickle.load(f)
 
         context_length = 256
@@ -291,6 +292,32 @@ def run_sae_batch(
                     "layer" : layer,
                     "lm_name" : model_name,
                     "wandb_name": f"GatedAnnealTrainer-{model_type}-{i}",
+                    "device": device,
+                }
+            )
+    elif trainer_type == "top_k":
+        k_ = [int(k) for k in t.linspace(10, 400, 40)]
+        param_combinations = itertools.product(
+            expansion_factor_, k_
+        )
+
+        print(f"Sweep parameters for {trainer_type}: ")
+        print("k: ", k_)
+
+        for i, param_setting in enumerate(param_combinations):
+            expansion_factor, k = param_setting
+            trainer_configs.append(
+                {
+                    "trainer": TrainerTopK,
+                    "dict_class": AutoEncoderTopK,
+                    "activation_dim": activation_dim,
+                    "dict_size": expansion_factor * activation_dim,
+                    "k" : k,
+                    "steps": steps,
+                    "seed": seed,
+                    "layer" : layer,
+                    "lm_name" : model_name,
+                    "wandb_name": f"TrainerTopK-{model_type}-{i}",
                     "device": device,
                 }
             )
