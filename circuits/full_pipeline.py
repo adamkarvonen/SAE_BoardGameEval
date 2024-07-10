@@ -214,8 +214,7 @@ def analyze_sae_groups(
     autoencoder_group_paths: list[str], csv_output_path: str, config: p_config.Config
 ):
 
-    N_GPUS = 1
-    RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)])
+    RESOURCE_STACK = deque([f"cuda:{i}" for i in range(config.N_GPUS)])
 
     othello = check_all_sae_groups(autoencoder_group_paths)
 
@@ -438,8 +437,8 @@ def analyze_sae_groups(
             # Put the GPU back on the stack after we're done
             RESOURCE_STACK.append(device)
             return df
-
-        dfs = Parallel(n_jobs=N_GPUS, require="sharedmem")(
+        
+        dfs = Parallel(n_jobs=config.N_GPUS, require="sharedmem")(
             delayed(full_eval_pipeline)(autoencoder_path) for autoencoder_path in folders
         )
 
@@ -456,7 +455,7 @@ def analyze_sae_groups(
     results_filename_filter = str(config.eval_sae_n_inputs) + "_"
     f1_analysis_thresholds = config.f1_analysis_thresholds.tolist()
 
-    RESOURCE_STACK = deque([f"cuda:{i}" for i in range(N_GPUS)])
+    RESOURCE_STACK = deque([f"cuda:{i}" for i in range(config.N_GPUS)])
 
     device = RESOURCE_STACK.pop()
 
@@ -475,12 +474,13 @@ def analyze_sae_groups(
 # NOTE: We are going to check that all autoencoders in a given group are for Chess XOR Othello
 
 othello_group_paths = [
-    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-gated",
-    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-gated_anneal",
-    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-p_anneal",
-    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-standard",
+    "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-gated",
+    "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-gated_anneal",
+    "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-p_anneal",
+    "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-standard",
+    "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-top_k",
 ]
-othello_output_path = "autoencoders/othello-trained_model-layer_5-2024-05-23/results.csv"
+othello_output_path = "autoencoders/othello-trained_model-layer_5-2024-07-08/results.csv"
 
 othello_random_group_paths = [
     "autoencoders/othello-random_model-layer_5-standard",
@@ -488,12 +488,13 @@ othello_random_group_paths = [
 othello_random_output_path = "autoencoders/othello-random_model-layer_5-standard/results.csv"
 
 chess_group_paths = [
-    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-gated",
-    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-gated_anneal",
-    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-p_anneal",
-    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-standard",
+    "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-gated",
+    "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-gated_anneal",
+    "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-p_anneal",
+    "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-standard",
+    "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-top_k",
 ]
-chess_output_path = "autoencoders/chess-trained_model-layer_5-2024-05-23/results.csv"
+chess_output_path = "autoencoders/chess-trained_model-layer_5-2024-07-08/results.csv"
 
 chess_random_group_paths = [
     "autoencoders/chess-random_model-layer_5-standard",
@@ -536,11 +537,13 @@ othello_groups = [(othello_test_path, othello_test_output_path)]
 chess_groups = [(chess_test_path, chess_test_output_path)]
 
 if __name__ == "__main__":
-    groups = othello_groups
+    groups = [(othello_group_paths, othello_output_path)]
     main_config = p_config.Config()
 
     # To edit the main_config, you can do things like:
     # main_config.eval_sae_n_inputs = 1000
+    main_config.N_GPUS = 8
+    main_config.batch_size = 100
 
     for group_path, output_path in groups:
         analyze_sae_groups(group_path, output_path, main_config)

@@ -33,6 +33,7 @@ from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
 from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
+from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
 
 
 @dataclass
@@ -160,20 +161,23 @@ def get_ae_bundle(
     if use_identity_dict:
         ae = get_identity_autoencoder(config)
     else:
-        # rangell: this is a super hacky way to get the correct dictionary class from the config
-        # TODO (rangell): make this better in the future.
-        # old: ae = AutoEncoder.from_pretrained(autoencoder_model_path, device=device)
         config_args = []
         for k, v in config["trainer"].items():
             if k not in ["trainer_class", "sparsity_penalty"]:
-                if isinstance(v, str) and k != "dict_class":
-                    config_args.append(k + "=" + "'" + v + "'")
-                else:
-                    config_args.append(k + "=" + str(v))
+                if not(config["trainer"]["trainer_class"] == "TrainerTopK" and k == "lr"):
+                    if isinstance(v, str) and k != "dict_class":
+                        config_args.append(k + "=" + "'" + v + "'")
+                    else:
+                        config_args.append(k + "=" + str(v))
         config_str = ", ".join(config_args)
-        ae = eval(
-            config["trainer"]["trainer_class"] + f"({config_str})"
-        ).ae.__class__.from_pretrained(autoencoder_model_path, device=device)
+
+        # rangell: this is a super hacky way to get the correct dictionary class from the config
+        ae_class = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__
+        if  ae_class == AutoEncoderTopK:
+            ae = ae_class.from_pretrained(
+                autoencoder_model_path, k=config["trainer"]["k"], device=device)
+        else:
+            ae = ae_class.from_pretrained(autoencoder_model_path, device=device)
         ae = ae.to(device)
 
     model_name = config["trainer"]["lm_name"]
