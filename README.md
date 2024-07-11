@@ -12,6 +12,10 @@ The `full_pipeline` can be ran on SAE feature activations or MLP neuron activati
 
 This location of this `f1_results.csv` is already set in `f1_analysis.ipynb` to recreate all graphs from the paper. The data used to create the graphs from our paper can be found in `autoencoders/saved_data`.
 
+**SAE Training**
+
+To train SAEs on ChessGPT or OthelloGPT, refer to the README in `circuits/sae_training`.
+
 **Shape Annotations**
 
 I've been using this tip from Noam Shazeer:
