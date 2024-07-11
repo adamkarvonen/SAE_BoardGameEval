@@ -10,10 +10,10 @@ from circuits.utils import (
     get_model,
 )
 
-from dictionary_learning.training import trainSAE
-from dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from dictionary_learning.buffer import NNsightActivationBuffer
-from dictionary_learning.dictionary import AutoEncoder
+from circuits.dictionary_learning.training import trainSAE
+from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.buffer import NNsightActivationBuffer
+from circuits.dictionary_learning.dictionary import AutoEncoder
 
 
 def get_args():

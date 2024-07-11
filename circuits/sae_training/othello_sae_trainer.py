@@ -10,28 +10,22 @@ from circuits.utils import (
     get_model,
 )
 
-from dictionary_learning.training import trainSAE
-from dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from dictionary_learning.buffer import NNsightActivationBuffer
-from dictionary_learning.dictionary import AutoEncoder
+from circuits.dictionary_learning.training import trainSAE
+from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.buffer import NNsightActivationBuffer
+from circuits.dictionary_learning.dictionary import AutoEncoder
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--save_dir", type=str, required=True,
-                        help="where to store sweep")
-    parser.add_argument("--dry_run", action="store_true",  help="dry run sweep")
+    parser.add_argument("--save_dir", type=str, required=True, help="where to store sweep")
+    parser.add_argument("--dry_run", action="store_true", help="dry run sweep")
     args = parser.parse_args()
     return args
 
 
-def run_sae_training(
-        layer : int,
-        save_dir : str,
-        device : str,
-        dry_run : bool = False
-):
-   
+def run_sae_training(layer: int, save_dir: str, device: str, dry_run: bool = False):
+
     # model and data parameters
     model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
     dataset_name = "taufeeque/othellogpt"
@@ -39,7 +33,7 @@ def run_sae_training(
     activation_dim = 512 * 4  # output dimension of the layer
 
     buffer_size = int(3e4 / 4)
-    llm_batch_size = 128 # 256 for A100 GPU, 64 for 1080ti
+    llm_batch_size = 64  # 256 for A100 GPU, 64 for 1080ti
     sae_batch_size = 8192
     num_tokens = 500_000_000
 
@@ -58,13 +52,12 @@ def run_sae_training(
     sparsity_queue_length = 10
     anneal_start = 1000
     n_sparsity_updates = 10
-    initial_sparsity_penalty = 0.03162277489900589   
-
+    initial_sparsity_penalty = 0.03162277489900589
 
     # Initialize model, data and activation buffer
     model = get_model(model_name, device)
     # submodule = model.blocks[layer].hook_resid_post # resid_post
-    submodule = model.blocks[layer].mlp.hook_post # resid_pre
+    submodule = model.blocks[layer].mlp.hook_post  # resid_pre
     data = othello_hf_dataset_to_generator(
         dataset_name, context_length=context_length, split="train", streaming=True
     )
@@ -103,15 +96,14 @@ def run_sae_training(
             "steps": steps,
             "seed": seed,
             "wandb_name": f"PAnnealTrainer-othello-mlp-layer-{layer}",
-            "layer" : layer,
-            "lm_name" : model_name,
+            "layer": layer,
+            "lm_name": model_name,
             "device": device,
         }
     )
 
-
     print(f"len trainer configs: {len(trainer_configs)}")
-    save_dir = f'{save_dir}layer_{layer}'
+    save_dir = f"{save_dir}layer_{layer}"
 
     if not dry_run:
         # actually run the sweep
@@ -123,6 +115,7 @@ def run_sae_training(
             save_dir=save_dir,
             log_steps=log_steps,
         )
+
 
 if __name__ == "__main__":
     args = get_args()
