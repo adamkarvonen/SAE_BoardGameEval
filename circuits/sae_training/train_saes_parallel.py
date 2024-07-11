@@ -348,13 +348,3 @@ if __name__ == "__main__":
         random_model=args.random_model,
         dry_run=args.dry_run,
     )
-
-#trainer_types = ["standard", "p_anneal", "gated", "gated_anneal"]
-#N_GPUS = 4
-
-#cuda_devices = [f"cuda:{i}" for i in range(N_GPUS)]
-#
-#Parallel(n_jobs=N_GPUS)(
-#    delayed(run_sae_batch)(trainer_type, device)
-#    for trainer_type, device in zip(trainer_types, cuda_devices)
-#)

@@ -18,11 +18,12 @@ sbatch_template = """
 #SBATCH --time=2-00:00:00
 
 export PYTHONPATH="${PYTHONPATH}:/work/pi_mccallum_umass_edu/rangell_umass_edu/chess-gpt-circuits/"
+export PYTHONPATH="${PYTHONPATH}:/work/pi_mccallum_umass_edu/rangell_umass_edu/chess-gpt-circuits/circuits/"
 source ~/.bashrc
 eval "$(conda shell.bash hook)"
 conda activate sae
 
-python circuits/train_saes_parallel.py --game __game__ --layer __layer__ --trainer_type __trainer_type__ --save_dir __save_dir__ __extra_args__
+python circuits/sae_training/train_saes_parallel.py --game __game__ --layer __layer__ --trainer_type __trainer_type__ --save_dir __save_dir__ __extra_args__
 """
 
 
@@ -33,10 +34,10 @@ if __name__ == "__main__":
     trained_model = True
     game = "othello"
     layer = 5
-    trainer_type = "gated"
+    trainer_type = "top_k"
     save_dir = f"circuits/dictionary_learning/dictionaries/{game}-"\
                f"{'trained_model' if trained_model else 'random_model'}-"\
-               f"layer_{layer}-{trainer_type}-2024-05-26"
+               f"layer_{layer}-{trainer_type}-2024-07-10"
 
     extra_args = []
     if dry_run:
