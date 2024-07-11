@@ -15,4 +15,4 @@ By default, this command trains a standard SAE with p-annealing. There are other
 
 To train Chess SAEs on a single GPU, run `python chess_sae_trainer.py` with the same flag options.
 
-To train SAEs on multiple GPUs, TODO
+There's various other training scripts available that we experimented with, including some that train in parallel.
