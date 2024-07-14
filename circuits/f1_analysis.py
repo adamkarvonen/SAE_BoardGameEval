@@ -12,9 +12,8 @@ import circuits.utils as utils
 
 
 def best_f1_average(f1_TFRRC: torch.Tensor, config: chess_utils.Config) -> torch.Tensor:
-    """For every threshold, for every square, find the best F1 score across all features. Then average across all squares.
-    NOTE: If the function is binary, num_squares == 1. If it is board to piece state, num_squares == 8 * 8 * 12
-    """
+    """Find the best threshold for a given board to state function, then find the best F1 score across all features for every square.
+    Then average across all squares."""
     f1_TRRC, _ = torch.max(f1_TFRRC, dim=1)
 
     T, R1, R2, C = f1_TRRC.shape
@@ -25,6 +24,26 @@ def best_f1_average(f1_TFRRC: torch.Tensor, config: chess_utils.Config) -> torch
     max_possible = R1 * R2 * C
 
     f1_T = einops.reduce(f1_TRRC, "T R1 R2 C -> T", "sum") / max_possible
+
+    return f1_T
+
+
+def best_f1_per_threshold(f1_TFRRC: torch.Tensor, config: chess_utils.Config) -> torch.Tensor:
+    """Find the best threshold for every square, then find the best F1 score across all features for every square.
+    Then average across all squares."""
+    f1_FRRC, _ = torch.max(f1_TFRRC, dim=0)
+    f1_RRC, _ = torch.max(f1_FRRC, dim=0)
+
+    T, F, R1, R2, C = f1_TFRRC.shape
+
+    if config.one_hot_mask_idx is not None:
+        C -= 1
+
+    max_possible = R1 * R2 * C
+
+    f1 = f1_RRC.sum() / max_possible
+
+    f1_T = einops.repeat(f1, "-> T", T=T)
 
     return f1_T
 
