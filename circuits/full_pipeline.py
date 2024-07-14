@@ -314,6 +314,7 @@ def analyze_sae_groups(
                 autoencoder_path, n_inputs=config.eval_results_n_inputs
             )
 
+            # In eval_results, we get SAE metrics like L0, loss recovered, etc. Takes minimal runtime
             if config.run_eval_results:
 
                 # If this is set, everything below should be reproducible
@@ -340,6 +341,8 @@ def analyze_sae_groups(
                 indexing_function=indexing_function,
             )
 
+            # In eval_sae.aggreagate_statistics, we find the probability distribution over the board state over every feature
+            # at every activation threshold. This is used to calculate future metrics like board reconstruction and coverage.
             if config.run_eval_sae:
                 print("Aggregating", autoencoder_path)
                 aggregation_results = eval_sae.aggregate_statistics(
@@ -366,6 +369,8 @@ def analyze_sae_groups(
             else:
                 analysis_device = device
 
+            # In analysis.analyze_results_dict, we "label" the features. Any board state that is present with
+            # at least high_threshold probability is labeled as 1. This is only used for board reconstruction.
             expected_feature_labels_output_location = expected_aggregation_output_location.replace(
                 "results.pkl", "feature_labels.pkl"
             )
@@ -395,6 +400,8 @@ def analyze_sae_groups(
                 "results.pkl", "reconstruction.pkl"
             )
 
+            # In eval_board_reconstruction, we used our `feature_labels` to reconstruct the board state
+            # on an unseen test dataset. We then can calculate the F1 score of the reconstruction.
             if config.run_board_reconstruction:
                 print("Testing board reconstruction")
                 board_reconstruction_results = eval_board_reconstruction.test_board_reconstructions(
@@ -416,6 +423,7 @@ def analyze_sae_groups(
                     board_reconstruction_results = pickle.load(f)
                 board_reconstruction_results = utils.to_device(board_reconstruction_results, device)
 
+            # Add all the results to the dataframe for plotting purposes
             df = append_results(
                 eval_results,
                 aggregation_results,
@@ -437,7 +445,7 @@ def analyze_sae_groups(
             # Put the GPU back on the stack after we're done
             RESOURCE_STACK.append(device)
             return df
-        
+
         dfs = Parallel(n_jobs=config.N_GPUS, require="sharedmem")(
             delayed(full_eval_pipeline)(autoencoder_path) for autoencoder_path in folders
         )
@@ -459,7 +467,8 @@ def analyze_sae_groups(
 
     device = RESOURCE_STACK.pop()
 
-    f1_analysis.complete_analysis_pipeline(
+    # Coverage is calculated here
+    f1_analysis.add_coverage_to_df(
         autoencoder_group_paths,
         csv_output_path,
         results_filename_filter,

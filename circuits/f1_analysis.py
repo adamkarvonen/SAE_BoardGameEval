@@ -100,7 +100,7 @@ def check_df_if_othello(df: pd.DataFrame) -> bool:
     raise ValueError("Could not determine if this is an Othello dataframe")
 
 
-def get_all_sae_f1_results(
+def calculate_all_sae_coverage(
     autoencoder_group_paths: list[str],
     df: pd.DataFrame,
     results_filename_filter: str,
@@ -187,7 +187,7 @@ def get_all_sae_f1_results(
     return all_sae_results
 
 
-def update_dataframe_with_results(
+def update_dataframe_with_coverage_results(
     df: pd.DataFrame,
     all_sae_results: dict,
     custom_function_names: list[str],
@@ -400,7 +400,7 @@ def add_average_coverage_for_columns(
     return df, average_metric_columns, average_metric_idx_columns
 
 
-def complete_analysis_pipeline(
+def add_coverage_to_df(
     autoencoder_group_paths: list[str],
     csv_results_path: str,
     results_filename_filter: str,
@@ -414,7 +414,7 @@ def complete_analysis_pipeline(
     )
 
     custom_function_names = get_custom_function_names(custom_functions)
-    all_sae_results = get_all_sae_f1_results(
+    all_sae_results = calculate_all_sae_coverage(
         autoencoder_group_paths,
         df,
         results_filename_filter,
@@ -423,7 +423,7 @@ def complete_analysis_pipeline(
         device,
         thresholds,
     )
-    df = update_dataframe_with_results(
+    df = update_dataframe_with_coverage_results(
         df, all_sae_results, custom_function_names, autoencoder_group_paths, thresholds
     )
     output_path = csv_results_path.replace("results.csv", "f1_results.csv")
