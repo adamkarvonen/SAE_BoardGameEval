@@ -341,26 +341,28 @@ def analyze_board_tracker(
     print_results: bool = True,
     verbose: bool = False,
 ) -> tuple[torch.Tensor, dict]:
-
-    othello = False
+    """Finds all board squares that were active more than high_threshold % of the time and
+    more than significance_threshold times. Returns them as 1s in above_counts_binary_TFRRC. All other squares are 0s.
+    """
+    # othello = False
     function_name = function.__name__
     misc_stats[function_name] = {}
 
-    if function_name in othello_utils.othello_functions:
-        othello = True
+    # if function_name in othello_utils.othello_functions:
+    #     othello = True
 
     normalized_on_key = on_key + "_normalized"
     normalized_off_key = off_key + "_normalized"
 
-    num_thresholds = results[function_name][normalized_on_key].shape[0]
+    # num_thresholds = results[function_name][normalized_on_key].shape[0]
 
     piece_state_on_normalized = results[function_name][normalized_on_key].clone()
     piece_state_off_normalized = results[function_name][normalized_off_key].clone()
     piece_state_on_TFRRC = results[function_name][on_key].clone()
     piece_state_off_TFRRC = results[function_name][off_key].clone()
-    original_shape = piece_state_on_TFRRC.shape
+    # original_shape = piece_state_on_TFRRC.shape
 
-    piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
+    # piece_state_off_counting_TFRRC = piece_state_off_TFRRC.clone()
 
     (
         above_counts_T,
@@ -397,38 +399,38 @@ def analyze_board_tracker(
     #    print_results=print_results,
     # )
 
-    summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
-        above_counts_T, above_counts_binary_TFRRC, original_shape
-    )
+    # summary_board_RR, class_dict_C, coverage_RR, coverage = get_summary_board(
+    #     above_counts_T, above_counts_binary_TFRRC, original_shape
+    # )
 
-    (
-        classifier_summary_board_RR,
-        classifier_class_dict_C,
-        classifier_coverage_RR,
-        classifier_coverage,
-    ) = get_summary_board(classifier_counts_T, classifier_counts_binary_TFRRC, original_shape)
+    # (
+    #     classifier_summary_board_RR,
+    #     classifier_class_dict_C,
+    #     classifier_coverage_RR,
+    #     classifier_coverage,
+    # ) = get_summary_board(classifier_counts_T, classifier_counts_binary_TFRRC, original_shape)
 
-    max_possible_coverage = (
-        summary_board_RR.shape[0] * summary_board_RR.shape[1] * (class_dict_C.shape[0])
-    )
+    # max_possible_coverage = (
+    #     summary_board_RR.shape[0] * summary_board_RR.shape[1] * (class_dict_C.shape[0])
+    # )
 
-    if print_results:
-        print(
-            f"{function_name} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
-        )
-        print(above_counts_T)
-        print(summary_board_RR)
-        print(class_dict_C)
-        print(coverage_RR)
-        print()
-        print(
-            f"{function_name} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
-        )
-        print(classifier_counts_T)
-        print(classifier_summary_board_RR)
-        print(classifier_class_dict_C)
-        print(classifier_coverage_RR)
-        print()
+    # if print_results:
+    #     print(
+    #         f"{function_name} (high precision) coverage {coverage} out of {max_possible_coverage} max possible:"
+    #     )
+    #     print(above_counts_T)
+    #     print(summary_board_RR)
+    #     print(class_dict_C)
+    #     print(coverage_RR)
+    #     print()
+    #     print(
+    #         f"{function_name} (high precision and recall) coverage {classifier_coverage} out of {max_possible_coverage} max possible::"
+    #     )
+    #     print(classifier_counts_T)
+    #     print(classifier_summary_board_RR)
+    #     print(classifier_class_dict_C)
+    #     print(classifier_coverage_RR)
+    #     print()
 
     misc_stats[function_name]["high_precision_counts_per_T"] = above_counts_T
     misc_stats[function_name]["high_precision_and_recall_counts_per_T"] = classifier_counts_T
