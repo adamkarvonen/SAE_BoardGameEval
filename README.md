@@ -18,7 +18,7 @@ To perform the analysis in the paper, run `python full_pipeline.py`. By default,
 
 The `full_pipeline` can be ran on SAE feature activations or MLP neuron activations on both ChessGPT and OthelloGPT. You just have to select the autoencoder group path, and everything else should happen automatically. Refer to `circuits/pipeline_config.py` to set config values and for explanations of their purpose. To decrease runtime, we support parallel analysis on multiple GPUs. This can also be set in `pipeline_config.py`.
 
-This location of this `f1_results.csv` is already set in `f1_analysis.ipynb` to recreate all graphs from the paper. The data used to create the graphs from our paper can be found in `autoencoders/saved_data`.
+`f1_analysis.ipynb` is used to create all graphs in the paper. The data used to create the graphs from our paper can be found in `autoencoders/saved_data`.By default, the csv path in `f1_analysis.ipynb` is set to the saved chess data, and you can recreate all paper chess graphs by running the notebook. New results can be analyzed by updating the csv path in `f1_analysis.ipynb`.
 
 **SAE Training**
 
