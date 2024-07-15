@@ -1,6 +1,14 @@
 **Setup** 
 
-Create a new virtual python environment (I'm using 3.11) and run `./setup.sh`, or run each command in `setup.sh` individually. This will install all requirements, installs the project in editable mode, and check out the correct branch of the `dictionary_learning` submodule. By default, the repo includes an example Chess and Othello SAE. If you want to download sweeps of SAEs for analysis, refer to `autoencoders/download_saes.sh`.
+Create a new virtual python environment (I'm using 3.11). Then, run:
+
+```
+pip install -r requirements.txt
+pip install -e .
+git submodule update --init
+```
+
+This will install all requirements, installs the project in editable mode, and install the correct commit of the `dictionary_learning` submodule. By default, the repo includes an example Chess and Othello SAE. If you want to download sweeps of SAEs for analysis, refer to `autoencoders/download_saes.sh`.
 
 **Getting Started**
 
