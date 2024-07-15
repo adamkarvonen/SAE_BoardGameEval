@@ -29,10 +29,7 @@ from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncode
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
-from circuits.dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
-from circuits.dictionary_learning.trainers.standard_new import StandardTrainerNew
 from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
 
 
@@ -164,7 +161,7 @@ def get_ae_bundle(
         config_args = []
         for k, v in config["trainer"].items():
             if k not in ["trainer_class", "sparsity_penalty"]:
-                if not(config["trainer"]["trainer_class"] == "TrainerTopK" and k == "lr"):
+                if not (config["trainer"]["trainer_class"] == "TrainerTopK" and k == "lr"):
                     if isinstance(v, str) and k != "dict_class":
                         config_args.append(k + "=" + "'" + v + "'")
                     else:
@@ -173,9 +170,10 @@ def get_ae_bundle(
 
         # rangell: this is a super hacky way to get the correct dictionary class from the config
         ae_class = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__
-        if  ae_class == AutoEncoderTopK:
+        if ae_class == AutoEncoderTopK:
             ae = ae_class.from_pretrained(
-                autoencoder_model_path, k=config["trainer"]["k"], device=device)
+                autoencoder_model_path, k=config["trainer"]["k"], device=device
+            )
         else:
             ae = ae_class.from_pretrained(autoencoder_model_path, device=device)
         ae = ae.to(device)

@@ -20,9 +20,6 @@ from dictionary_learning.trainers.standard import StandardTrainer
 from dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from dictionary_learning.trainers.gdm import GatedSAETrainer
-from dictionary_learning.trainers.jump import JumpSAETrainer
-from dictionary_learning.trainers.standard_new import StandardTrainerNew
-from dictionary_learning.trainers.p_anneal_new import PAnnealTrainerNew
 from dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
 from dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
 from dictionary_learning.dictionary import (
