@@ -14,7 +14,7 @@ This will install all requirements, installs the project in editable mode, and i
 
 There is a walkthrough of the approach in `circuits/full_pipeline_walkthrough.ipynb`.
 
-To perform the analysis in the paper, run `python full_pipeline.py`. By default, it runs on the single Chess SAE in `autoencoders/testing_chess`. It takes a few minutes on an RTX 3090 and uses < 10GB of VRAM. By decreasing the batch size, it can run using < 2 GB of VRAM if necessary. At the bottom of the script, you can select which autoencoder groups you want to analyze. The output of `full_pipeline.py` for the default autoencoder group is `f1_results.csv` at `autoencoders/testing_chess`.
+To perform the analysis in the paper, run `python circuits/full_pipeline.py` from the main directory. By default, it runs on the single Chess SAE in `autoencoders/testing_chess`. It takes a few minutes on an RTX 3090 and uses < 10GB of VRAM. By decreasing the batch size, it can run using < 2 GB of VRAM if necessary. At the bottom of the script, you can select which autoencoder groups you want to analyze. The output of `full_pipeline.py` for the default autoencoder group is `f1_results.csv` at `autoencoders/testing_chess`.
 
 The `full_pipeline` can be ran on SAE feature activations or MLP neuron activations on both ChessGPT and OthelloGPT. You just have to select the autoencoder group path, and everything else should happen automatically. Refer to `circuits/pipeline_config.py` to set config values and for explanations of their purpose. To decrease runtime, we support parallel analysis on multiple GPUs. This can also be set in `pipeline_config.py`.
 
