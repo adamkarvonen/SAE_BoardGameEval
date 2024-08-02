@@ -488,28 +488,26 @@ def analyze_sae_groups(
 # Then, uncomment the desired group_paths and output_path variables below.
 # By default, at the bottom of this file, we have a test configuration that will run on the testing SAEs.
 
-# othello_group_paths = [
-#     "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-gated",
-#     "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-gated_anneal",
-#     "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-p_anneal",
-#     "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-standard",
-#     "autoencoders/othello-trained_model-layer_5-2024-07-08/othello-trained_model-layer_5-top_k",
-# ]
-# othello_output_path = "autoencoders/othello-trained_model-layer_5-2024-07-08/results.csv"
+othello_group_paths = [
+    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-gated",
+    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-gated_anneal",
+    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-p_anneal",
+    "autoencoders/othello-trained_model-layer_5-2024-05-23/othello-trained_model-layer_5-standard",
+]
+othello_output_path = "autoencoders/othello-trained_model-layer_5-2024-05-23/results.csv"
 
 # othello_random_group_paths = [
 #     "autoencoders/othello-random_model-layer_5-standard",
 # ]
 # othello_random_output_path = "autoencoders/othello-random_model-layer_5-standard/results.csv"
 
-# chess_group_paths = [
-#     "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-gated",
-#     "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-gated_anneal",
-#     "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-p_anneal",
-#     "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-standard",
-#     "autoencoders/chess-trained_model-layer_5-2024-07-08/chess-trained_model-layer_5-top_k",
-# ]
-# chess_output_path = "autoencoders/chess-trained_model-layer_5-2024-07-08/results.csv"
+chess_group_paths = [
+    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-gated",
+    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-gated_anneal",
+    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-p_anneal",
+    "autoencoders/chess-trained_model-layer_5-2024-05-23/chess-trained_model-layer_5-standard",
+]
+chess_output_path = "autoencoders/chess-trained_model-layer_5-2024-05-23/results.csv"
 
 # chess_random_group_paths = [
 #     "autoencoders/chess-random_model-layer_5-standard",
@@ -541,14 +539,16 @@ def analyze_sae_groups(
 #     (chess_all_layers_group_paths, chess_all_layers_output_path),
 # ]
 
+all_groups = [(chess_group_paths, chess_output_path), (othello_group_paths, othello_output_path)]
+
 othello_test_path = ["autoencoders/testing_othello/"]
 othello_test_output_path = "autoencoders/testing_othello/results.csv"
 
 chess_test_path = ["autoencoders/testing_chess/"]
 chess_test_output_path = "autoencoders/testing_chess/results.csv"
 
-othello_groups = [(othello_test_path, othello_test_output_path)]
-chess_groups = [(chess_test_path, chess_test_output_path)]
+# othello_groups = [(othello_test_path, othello_test_output_path)]
+# chess_groups = [(chess_test_path, chess_test_output_path)]
 
 if __name__ == "__main__":
     main_config = p_config.Config()
@@ -557,5 +557,5 @@ if __name__ == "__main__":
     # main_config.eval_sae_n_inputs = 1000
     # main_config.N_GPUS = 1
 
-    for group_path, output_path in othello_groups:
+    for group_path, output_path in all_groups:
         analyze_sae_groups(group_path, output_path, main_config)
