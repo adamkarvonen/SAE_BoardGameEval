@@ -19,7 +19,6 @@ from joblib import Parallel, delayed
 
 
 def initialize_dataframe(custom_functions: list[Callable]) -> pd.DataFrame:
-
     constant_columns = [
         "autoencoder_group_path",
         "autoencoder_path",
@@ -91,7 +90,6 @@ def append_results(
     autoencoder_path: str,
     reconstruction_file: str,
 ) -> pd.DataFrame:
-
     # Initialize the new row with constant fields
     new_row = {
         "autoencoder_group_path": autoencoder_group_path,
@@ -171,14 +169,14 @@ def append_results(
             function_name
         ]["num_multiple_classes"][best_idx].item()
         new_row[f"{function_name}_zero_num_true_and_false_positive_squares"] = (
-            board_reconstruction_results[function_name]["num_true_and_false_positive_squares"][
-                0
-            ].item()
+            board_reconstruction_results[
+                function_name
+            ]["num_true_and_false_positive_squares"][0].item()
         )
         new_row[f"{function_name}_best_num_true_and_false_positive_squares"] = (
-            board_reconstruction_results[function_name]["num_true_and_false_positive_squares"][
-                best_idx
-            ].item()
+            board_reconstruction_results[
+                function_name
+            ]["num_true_and_false_positive_squares"][best_idx].item()
         )
         new_row[f"{function_name}_high_precision_counts_per_T"] = misc_stats[function_name][
             "high_precision_counts_per_T"
@@ -213,7 +211,6 @@ def check_all_sae_groups(autoencoder_group_paths: list[str]) -> bool:
 def analyze_sae_groups(
     autoencoder_group_paths: list[str], csv_output_path: str, config: p_config.Config
 ):
-
     RESOURCE_STACK = deque([f"cuda:{i}" for i in range(config.N_GPUS)])
 
     othello = check_all_sae_groups(autoencoder_group_paths)
@@ -298,7 +295,6 @@ def analyze_sae_groups(
         folders = eval_sae.get_nested_folders(autoencoder_group_path)
 
         def full_eval_pipeline(autoencoder_path):
-
             torch.cuda.empty_cache()
 
             df = initialize_dataframe(custom_functions)
@@ -316,7 +312,6 @@ def analyze_sae_groups(
 
             # In eval_results, we get SAE metrics like L0, loss recovered, etc. Takes minimal runtime
             if config.run_eval_results:
-
                 # If this is set, everything below should be reproducible
                 # Then we can just save results from 1 run, make optimizations, and check that the results are the same
                 # The determinism is only needed for getting activations from the activation buffer for finding alive features
@@ -546,6 +541,11 @@ othello_test_output_path = "autoencoders/testing_othello/results.csv"
 
 chess_test_path = ["autoencoders/testing_chess/"]
 chess_test_output_path = "autoencoders/testing_chess/results.csv"
+
+all_groups = [
+    (chess_test_path, chess_test_output_path),
+    (othello_test_path, othello_test_output_path),
+]
 
 # othello_groups = [(othello_test_path, othello_test_output_path)]
 # chess_groups = [(chess_test_path, chess_test_output_path)]
