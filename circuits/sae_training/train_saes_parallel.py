@@ -6,29 +6,27 @@ import pickle
 
 from nnsight import LanguageModel
 
-#from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
+# from circuits.nanogpt_to_hf_transformers import NanogptTokenizer, convert_nanogpt_model
 from circuits.utils import (
     chess_hf_dataset_to_generator,
     othello_hf_dataset_to_generator,
     get_model,
     get_submodule,
+    SubmoduleType,
 )
 
-from dictionary_learning.training import trainSAE
-from dictionary_learning.trainers.standard import StandardTrainer
-from dictionary_learning.trainers.p_anneal import PAnnealTrainer
-from dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
-from dictionary_learning.trainers.gdm import GatedSAETrainer
-from dictionary_learning.trainers.jump import JumpSAETrainer
-from dictionary_learning.trainers.standard_new import StandardTrainerNew
-from dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
-from dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
-from dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
-from dictionary_learning.dictionary import (
+from circuits.dictionary_learning.training import trainSAE
+from circuits.dictionary_learning.trainers.standard import StandardTrainer
+from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
+from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
+from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
+
+from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
+from circuits.dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
+from circuits.dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
+from circuits.dictionary_learning.dictionary import (
     AutoEncoder,
     GatedAutoEncoder,
-    AutoEncoderNew,
-    JumpAutoEncoder,
 )
 
 from joblib import Parallel, delayed
@@ -38,28 +36,41 @@ from IPython import embed
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--game", type=str, choices=["chess", "othello"],
-                        required=True, help="data and model and context length to run on")
-    parser.add_argument("--layer", type=int, required=True,
-                        help="which residual stream layer to gather activations from")
-    parser.add_argument("--trainer_type", type=str, choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k"],
-                        required=True, help="run sweep on this trainer")
-    parser.add_argument("--save_dir", type=str, required=True,
-                        help="where to store sweep")
-    parser.add_argument("--random_model", action="store_true",  help="use random weight LM")
-    parser.add_argument("--dry_run", action="store_true",  help="dry run sweep")
+    parser.add_argument(
+        "--game",
+        type=str,
+        choices=["chess", "othello"],
+        required=True,
+        help="data and model and context length to run on",
+    )
+    parser.add_argument(
+        "--layer",
+        type=int,
+        required=True,
+        help="which residual stream layer to gather activations from",
+    )
+    parser.add_argument(
+        "--trainer_type",
+        type=str,
+        choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k"],
+        required=True,
+        help="run sweep on this trainer",
+    )
+    parser.add_argument("--save_dir", type=str, required=True, help="where to store sweep")
+    parser.add_argument("--random_model", action="store_true", help="use random weight LM")
+    parser.add_argument("--dry_run", action="store_true", help="dry run sweep")
     args = parser.parse_args()
     return args
 
 
 def run_sae_batch(
-        othello : bool,
-        layer : int,
-        trainer_type : str,
-        save_dir : str,
-        device : str,
-        random_model : bool = False,
-        dry_run : bool = False
+    othello: bool,
+    layer: int,
+    trainer_type: str,
+    save_dir: str,
+    device: str,
+    random_model: bool = False,
+    dry_run: bool = False,
 ):
     if not othello:
         with open("circuits/resources/meta.pkl", "rb") as f:
@@ -68,7 +79,7 @@ def run_sae_batch(
         context_length = 256
         if random_model:
             model_name = "adamkarvonen/RandomWeights8LayerChessGPT2"
-        else: 
+        else:
             model_name = "adamkarvonen/8LayerChessGPT2"
         dataset_name = "adamkarvonen/chess_sae_text"
         data = chess_hf_dataset_to_generator(
@@ -88,12 +99,13 @@ def run_sae_batch(
         model_type = "othello"
 
     model = get_model(model_name, device)
-    submodule = get_submodule(model_name, layer, model)
+    submodule_type = SubmoduleType.resid_post
+    submodule = get_submodule(model_name, layer, model, submodule_type)
 
     activation_dim = 512  # output dimension of the layer
 
     buffer_size = int(1e4 / 1)
-    llm_batch_size = 256 # 256 for A100 GPU, 64 for 1080ti
+    llm_batch_size = 256  # 256 for A100 GPU, 64 for 1080ti
     sae_batch_size = 8192
 
     num_tokens = 300_000_000
@@ -134,8 +146,10 @@ def run_sae_batch(
     anneal_start_ = [10000]
     n_sparsity_updates_ = [10]
     if trainer_type == "p_anneal":
-        #initial_sparsity_penalty_ = t.linspace(0.02, 0.08, 20).tolist()    # chess
-        initial_sparsity_penalty_ = t.linspace(0.025, 0.05, 20).tolist()    # othello
+        if othello:
+            initial_sparsity_penalty_ = t.linspace(0.025, 0.05, 20).tolist()  # othello
+        else:
+            initial_sparsity_penalty_ = t.linspace(0.02, 0.08, 20).tolist()  # chess
         param_combinations = itertools.product(
             learning_rate_,
             expansion_factor_,
@@ -178,14 +192,16 @@ def run_sae_batch(
                     "steps": steps,
                     "seed": seed,
                     "wandb_name": f"PAnnealTrainer-{model_type}-{i}",
-                    "layer" : layer,
-                    "lm_name" : model_name,
+                    "layer": layer,
+                    "lm_name": model_name,
                     "device": device,
                 }
             )
     elif trainer_type == "standard":
-        #initial_sparsity_penalty_ = t.linspace(0.03, 0.1, 20).tolist()    # chess
-        initial_sparsity_penalty_ = t.linspace(0.035, 0.08, 20).tolist()    # othello
+        if othello:
+            initial_sparsity_penalty_ = t.linspace(0.035, 0.08, 20).tolist()  # othello
+        else:
+            initial_sparsity_penalty_ = t.linspace(0.03, 0.1, 20).tolist()  # chess
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
@@ -208,15 +224,17 @@ def run_sae_batch(
                     "warmup_steps": warmup_steps,
                     "resample_steps": resample_steps,
                     "seed": seed,
-                    "layer" : layer,
-                    "lm_name" : model_name,
+                    "layer": layer,
+                    "lm_name": model_name,
                     "wandb_name": f"StandardTrainer-{model_type}-{i}",
                     "device": device,
                 }
             )
     elif trainer_type == "gated":
-        #initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()   # chess
-        initial_sparsity_penalty_ = t.linspace(1.0, 2.0, 20).tolist()   # othello
+        if othello:
+            initial_sparsity_penalty_ = t.linspace(1.0, 2.0, 20).tolist()  # othello
+        else:
+            initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()  # chess
         param_combinations = itertools.product(
             learning_rate_, expansion_factor_, initial_sparsity_penalty_
         )
@@ -239,15 +257,17 @@ def run_sae_batch(
                     "warmup_steps": warmup_steps,
                     "resample_steps": resample_steps,
                     "seed": seed,
-                    "layer" : layer,
-                    "lm_name" : model_name,
+                    "layer": layer,
+                    "lm_name": model_name,
                     "wandb_name": f"GatedSAETrainer-{model_type}-{i}",
                     "device": device,
                 }
             )
     elif trainer_type == "gated_anneal":
-        #initial_sparsity_penalty_ = t.linspace(0.05, 0.15, 20).tolist()   # chess
-        initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()    # othello
+        if othello:
+            initial_sparsity_penalty_ = t.linspace(0.15, 1.0, 20).tolist()  # othello
+        else:
+            initial_sparsity_penalty_ = t.linspace(0.05, 0.15, 20).tolist()  # chess
         param_combinations = itertools.product(
             learning_rate_,
             expansion_factor_,
@@ -289,17 +309,15 @@ def run_sae_batch(
                     "resample_steps": resample_steps,
                     "steps": steps,
                     "seed": seed,
-                    "layer" : layer,
-                    "lm_name" : model_name,
+                    "layer": layer,
+                    "lm_name": model_name,
                     "wandb_name": f"GatedAnnealTrainer-{model_type}-{i}",
                     "device": device,
                 }
             )
     elif trainer_type == "top_k":
         k_ = [int(k) for k in t.linspace(10, 400, 40)]
-        param_combinations = itertools.product(
-            expansion_factor_, k_
-        )
+        param_combinations = itertools.product(expansion_factor_, k_)
 
         print(f"Sweep parameters for {trainer_type}: ")
         print("k: ", k_)
@@ -312,11 +330,11 @@ def run_sae_batch(
                     "dict_class": AutoEncoderTopK,
                     "activation_dim": activation_dim,
                     "dict_size": expansion_factor * activation_dim,
-                    "k" : k,
+                    "k": k,
                     "steps": steps,
                     "seed": seed,
-                    "layer" : layer,
-                    "lm_name" : model_name,
+                    "layer": layer,
+                    "lm_name": model_name,
                     "wandb_name": f"TrainerTopK-{model_type}-{i}",
                     "device": device,
                 }
@@ -336,6 +354,7 @@ def run_sae_batch(
             save_dir=save_dir,
             log_steps=log_steps,
         )
+
 
 if __name__ == "__main__":
     args = get_args()
