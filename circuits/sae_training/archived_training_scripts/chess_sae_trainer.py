@@ -1,6 +1,8 @@
 # Simplified version of train saes parallel
 # TODO parallelize training for SAEs on multiple layers
 
+# to run: python circuits/sae_training/chess_sae_trainer.py --save_dir /workspace/SAE_BoardGameEval/autoencoders/chess_sweep_all_layers_panneal_0703
+
 import argparse
 import torch as t
 import gc

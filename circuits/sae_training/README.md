@@ -1,18 +1,7 @@
-To train Othello SAEs on a single GPU, run the following command:
+Our main SAE training script is `train_saes_parallel.py`. As an example of training Standard SAEs with p_annealing on layer 5 (0 indexed) of Chess-GPT, run:
 
-```
-python othello_sae_trainer.py \
-    --save_dir /share/u/can/SAE_BoardGameEval/autoencoders/transcoders/attn_out_sweep_all_layers_panneal_0703 \
-    # --no_wandb_logging \
-    # --dry_run \
-    # --transcoder \
-```
+`python circuits/sae_training/train_saes_parallel.py --game chess --layer 5 --trainer_type p_anneal --save_dir /workspace/SAE_BoardGameEval/autoencoders/chess_p_anneal_layer_5`
 
-Note that save_dir requires a full path.
-The first commented flag disables wandb logging. The second executes all code except training the SAE to look for potential errors. The third trains transcoders instead of SAEs trained to reconstruct activations.
+from the root directory.
 
-By default, this command trains a standard SAE with p-annealing. There are other available trainers in the `dictionary_learning` repo, such as TopK and Gated.
-
-To train Chess SAEs on a single GPU, run `python chess_sae_trainer.py` with the same flag options.
-
-There's various other training scripts available that we experimented with, including some that train in parallel.
+By default, this command trains a sweep of 40 standard SAEs with p-annealing. There are other available trainers in the `dictionary_learning` repo, such as TopK and Gated, which can be selected using the `--trainer_type` flag.

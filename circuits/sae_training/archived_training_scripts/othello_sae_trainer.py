@@ -1,6 +1,8 @@
 # Simplified version of train saes parallel
 # TODO parallelize training for SAEs on multiple layers
 
+# To run: python circuits/sae_training/othello_sae_trainer.py --save_dir /workspace/SAE_BoardGameEval/autoencoders/othello_sweep_all_layers_panneal_0703
+
 import argparse
 import torch as t
 import gc
@@ -25,7 +27,6 @@ def get_args():
 
 
 def run_sae_training(layer: int, save_dir: str, device: str, dry_run: bool = False):
-
     # model and data parameters
     model_name = "Baidicoot/Othello-GPT-Transformer-Lens"
     dataset_name = "taufeeque/othellogpt"
