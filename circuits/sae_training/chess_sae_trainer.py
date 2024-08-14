@@ -4,11 +4,9 @@
 import argparse
 import torch as t
 import gc
+import pickle
 
-from circuits.utils import (
-    chess_hf_dataset_to_generator,
-    get_model,
-)
+import circuits.utils as utils
 
 from circuits.dictionary_learning.training import trainSAE
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
@@ -25,7 +23,6 @@ def get_args():
 
 
 def run_sae_training(layer: int, save_dir: str, device: str, dry_run: bool = False):
-
     # model and data parameters
     model_type = "chess"
     model_name = "adamkarvonen/8LayerChessGPT2"
@@ -56,14 +53,16 @@ def run_sae_training(layer: int, save_dir: str, device: str, dry_run: bool = Fal
     initial_sparsity_penalty = 0.03263157606124878
 
     # Initialize model, data and activation buffer
-    model = get_model(model_name, device)
+    model = utils.get_model(model_name, device)
 
-    submodule_type = "mlp"
-    submodule = model.transformer.h[layer]  # resid_post
-    # submodule = model.transformer.h[layer].mlp.act # resid_pre
+    submodule_type = utils.SubmoduleType.resid_post
+    submodule = utils.get_submodule(model_name, layer, model, submodule_type)
 
-    data = chess_hf_dataset_to_generator(
-        dataset_name, context_length=context_length, split="train", streaming=True
+    with open("circuits/resources/meta.pkl", "rb") as f:
+        meta = pickle.load(f)
+
+    data = utils.chess_hf_dataset_to_generator(
+        dataset_name, meta, context_length=context_length, split="train", streaming=True
     )
     activation_buffer = NNsightActivationBuffer(
         data,
