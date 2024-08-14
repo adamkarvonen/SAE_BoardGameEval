@@ -4,4 +4,4 @@ Our main SAE training script is `train_saes_parallel.py`. As an example of train
 
 from the root directory.
 
-By default, this command trains a sweep of 40 standard SAEs with p-annealing. There are other available trainers in the `dictionary_learning` repo, such as TopK and Gated, which can be selected using the `--trainer_type` flag.
+By default, this command trains a sweep of 40 standard SAEs with p-annealing. There are other available trainers in the `dictionary_learning` repo, such as TopK and Gated, which can be selected using the `--trainer_type` flag. To adjust the size of the sweep, adjust the contents of `expansion_factor_` and `initial_sparsity_penalty_`. Note that these are set individually for each SAE trainer type.
