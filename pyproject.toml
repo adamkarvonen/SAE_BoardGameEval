@@ -8,7 +8,7 @@ version = "0.1.0"
 dependencies = [
     # Chess specific requirements
     "python-chess==1.999",
-    "pydantic==2.6.4",
+    "pydantic==2.9.1",
     "jaxtyping==0.2.28",
     
     # For OthelloGPT
@@ -18,15 +18,17 @@ dependencies = [
     "datasets==2.18.0",
     "einops==0.7.0",
     "matplotlib==3.8.4",
-    "nnsight==0.2.21",
+    "nnsight==0.3.7",
     "pandas==2.2.1",
     "plotly==5.20.0",
-    "torch==2.1.2",
+    "torch==2.5.1",
+    "torchvision==0.20.1", # Required for nnsight dependency issues
     "tqdm==4.66.2",
     "zstandard==0.22.0",
     "pytest==8.1.1",
     "transformers==4.39.3",
     "wandb==0.16.6",
+
 ]
 
 # Alternative dependencies for Python 3.12

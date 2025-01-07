@@ -21,7 +21,8 @@ from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTrainer
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 
-from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
+from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TopKTrainer
+from circuits.dictionary_learning.trainers.matroyshka_batch_top_k import MatroyshkaBatchTopKSAE, MatroyshkaBatchTopKTrainer
 from circuits.dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
 from circuits.dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
 from circuits.dictionary_learning.dictionary import (
@@ -52,7 +53,7 @@ def get_args():
     parser.add_argument(
         "--trainer_type",
         type=str,
-        choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k"],
+        choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k", "matroyshka"],
         required=True,
         help="run sweep on this trainer",
     )
@@ -105,10 +106,10 @@ def run_sae_batch(
     activation_dim = 512  # output dimension of the layer
 
     buffer_size = int(1e4 / 1)
-    llm_batch_size = 256  # 256 for A100 GPU, 64 for 1080ti
+    llm_batch_size = 64  # 256 for A100 GPU, 64 for 1080ti
     sae_batch_size = 8192
 
-    num_tokens = 300_000_000
+    num_tokens = 150_000_000
 
     activation_buffer = NNsightActivationBuffer(
         data,
@@ -125,7 +126,7 @@ def run_sae_batch(
 
     seed = 42
     steps = int(num_tokens / sae_batch_size)  # Total number of batches to train
-    save_steps = int(steps / 4)
+    save_steps = None
 
     # constants for training
     warmup_steps = 1000  # Warmup period at start of training and after each resample
@@ -326,7 +327,7 @@ def run_sae_batch(
             expansion_factor, k = param_setting
             trainer_configs.append(
                 {
-                    "trainer": TrainerTopK,
+                    "trainer": TopKTrainer,
                     "dict_class": AutoEncoderTopK,
                     "activation_dim": activation_dim,
                     "dict_size": expansion_factor * activation_dim,
@@ -335,10 +336,43 @@ def run_sae_batch(
                     "seed": seed,
                     "layer": layer,
                     "lm_name": model_name,
-                    "wandb_name": f"TrainerTopK-{model_type}-{i}",
+                    "wandb_name": f"TopKTrainer-{model_type}-{i}",
                     "device": device,
                 }
             )
+    elif trainer_type == "matroyshka":
+        k_ = [20, 40, 60, 80, 160, 320]
+        param_combinations = itertools.product(expansion_factor_, k_)
+
+        print(f"Sweep parameters for {trainer_type}: ")
+        print("k: ", k_)
+
+        for i, param_setting in enumerate(param_combinations):
+            expansion_factor, k = param_setting
+            for weights_temperature in [1.0, 2.0, 100.0]:
+                trainer_configs.append(
+                    {
+                        "trainer": MatroyshkaBatchTopKTrainer,
+                        "dict_class": MatroyshkaBatchTopKSAE,
+                        "activation_dim": activation_dim,
+                        "dict_size": expansion_factor * activation_dim,
+                        "group_fractions": [
+                            (1 / 32),
+                            (1 / 16),
+                            (1 / 8),
+                            (1 / 4),
+                            ((1 / 2) + (1 / 32)),
+                        ],
+                        "weights_temperature": weights_temperature,
+                        "k": k,
+                        "steps": steps,
+                        "seed": seed,
+                        "layer": layer,
+                        "lm_name": model_name,
+                        "wandb_name": f"MatroyshkaBatchTopKTrainer-{model_type}-{i}",
+                        "device": device,
+                    }
+                )
     else:
         raise ValueError("Unknown trainer type: ", trainer_type)
 

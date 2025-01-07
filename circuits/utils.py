@@ -30,7 +30,7 @@ from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTraine
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
-from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TrainerTopK
+from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TopKTrainer
 
 
 @dataclass
