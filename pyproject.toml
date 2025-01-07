@@ -5,3 +5,46 @@ build-backend = "hatchling.build"
 [project]
 name = "circuits"
 version = "0.1.0"
+dependencies = [
+    # Chess specific requirements
+    "python-chess==1.999",
+    "pydantic==2.6.4",
+    "jaxtyping==0.2.28",
+    
+    # For OthelloGPT
+    "transformer_lens==1.17.0",
+    
+    # Core dependencies (tested on Python 3.11)
+    "datasets==2.18.0",
+    "einops==0.7.0",
+    "matplotlib==3.8.4",
+    "nnsight==0.2.21",
+    "pandas==2.2.1",
+    "plotly==5.20.0",
+    "torch==2.1.2",
+    "tqdm==4.66.2",
+    "zstandard==0.22.0",
+    "pytest==8.1.1",
+    "transformers==4.39.3",
+    "wandb==0.16.6",
+]
+
+# Alternative dependencies for Python 3.12
+# dependencies = [
+#     "python-chess==1.999",
+#     "pydantic==2.6.4",
+#     "jaxtyping==0.2.28",
+#     "transformer_lens==1.17.0",
+#     "datasets==2.19.1",
+#     "einops==0.8.0",
+#     "matplotlib==3.8.4",
+#     "nnsight==0.2.19",
+#     "pandas==2.2.2",
+#     "plotly==5.22.0",
+#     "torch==2.3.0",
+#     "tqdm==4.66.4",
+#     "zstandard==0.22.0",
+#     "pytest==8.2.2",
+#     "transformers==4.40.0",
+#     "wandb==0.16.6",
+# ]

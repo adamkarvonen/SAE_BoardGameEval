@@ -3,7 +3,6 @@
 Create a new virtual python environment (I'm using 3.11). Then, run:
 
 ```
-pip install -r requirements.txt
 pip install -e .
 git submodule update --init
 ```
