@@ -23,6 +23,7 @@ from circuits.dictionary_learning.dictionary import (
     AutoEncoderNew,
     IdentityDict,
 )
+import circuits.dictionary_learning.utils as dictionary_utils
 
 # These imports are required for the current hacky way we are loading SAE classes
 from circuits.dictionary_learning.dictionary import AutoEncoder, GatedAutoEncoder, AutoEncoderNew
@@ -159,24 +160,7 @@ def get_ae_bundle(
     if use_identity_dict:
         ae = get_identity_autoencoder(config)
     else:
-        config_args = []
-        for k, v in config["trainer"].items():
-            if k not in ["trainer_class", "sparsity_penalty"]:
-                if not (config["trainer"]["trainer_class"] == "TrainerTopK" and k == "lr"):
-                    if isinstance(v, str) and k != "dict_class":
-                        config_args.append(k + "=" + "'" + v + "'")
-                    else:
-                        config_args.append(k + "=" + str(v))
-        config_str = ", ".join(config_args)
-
-        # rangell: this is a super hacky way to get the correct dictionary class from the config
-        ae_class = eval(config["trainer"]["trainer_class"] + f"({config_str})").ae.__class__
-        if ae_class == AutoEncoderTopK:
-            ae = ae_class.from_pretrained(
-                autoencoder_model_path, k=config["trainer"]["k"], device=device
-            )
-        else:
-            ae = ae_class.from_pretrained(autoencoder_model_path, device=device)
+        ae, _ = dictionary_utils.load_dictionary(autoencoder_path, device)
         ae = ae.to(device)
 
     model_name = config["trainer"]["lm_name"]
