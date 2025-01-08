@@ -31,6 +31,7 @@ from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
 from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TopKTrainer
+from circuits.dictionary_learning.trainers.matroyshka_batch_top_k import MatroyshkaBatchTopKTrainer, MatroyshkaBatchTopKSAE
 
 
 @dataclass
@@ -329,19 +330,34 @@ def collect_activations_batch(
     inputs_BL: torch.Tensor,
     dims: Int[Tensor, "num_dims"],
 ) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
+    
+
+    with ae_bundle.model.trace(inputs_BL[0:1, :1]):
+        temp_output = ae_bundle.submodule.output.save()
+
+    output_is_tuple = False
+    # Note: isinstance() won't work here as torch.Size is a subclass of tuple,
+    # so isinstance(temp_output.shape, tuple) would return True even for torch.Size.
+    if type(temp_output.shape) == tuple:
+        output_is_tuple = True
+
     with ae_bundle.model.trace(
         inputs_BL, invoker_args=dict(max_length=ae_bundle.context_length, truncation=True)
     ):
-        cur_tokens = ae_bundle.model.input[0].save()
+        cur_tokens = ae_bundle.model.input.save()
         cur_activations = ae_bundle.submodule.output
-        if type(cur_activations.shape) == tuple:
+        if output_is_tuple:
             cur_activations = cur_activations[0]
+
         cur_activations = ae_bundle.ae.encode(cur_activations)
         cur_activations_BLF = cur_activations[
             :, :, dims
         ].save()  # Shape: (batch_size, max_length, dim_count)
+
+    cur_activations_BLF = cur_activations_BLF.value
+    assert len(cur_activations_BLF.shape) == 3, "cur_activations_BLF shape is not 3D, check output is tuple (refer to evaluation.py)"
     cur_activations_FBL = rearrange(
-        cur_activations_BLF.value, "b n d -> d b n"
+        cur_activations_BLF, "b n d -> d b n"
     )  # Shape: (dim_count, batch_size, max_length)
 
     return cur_activations_FBL, cur_tokens.value[0]

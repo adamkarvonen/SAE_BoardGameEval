@@ -4,7 +4,7 @@ import torch
 import circuits.eval_sae_as_classifier as eval_sae
 import circuits.utils as utils
 
-from circuits.dictionary_learning.evaluation import evaluate
+from circuits.evaluation import evaluate
 
 
 def get_output_location(autoencoder_path: str, n_inputs: int) -> str:
