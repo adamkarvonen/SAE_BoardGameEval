@@ -28,6 +28,7 @@ dependencies = [
     "pytest==8.1.1",
     "transformers==4.39.3",
     "wandb==0.16.6",
+    "joblib==1.4.2"
 
 ]
 

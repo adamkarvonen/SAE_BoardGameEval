@@ -32,7 +32,10 @@ from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 from circuits.dictionary_learning.trainers.p_anneal import PAnnealTrainer
 from circuits.dictionary_learning.trainers.standard import StandardTrainer
 from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TopKTrainer
-from circuits.dictionary_learning.trainers.matroyshka_batch_top_k import MatroyshkaBatchTopKTrainer, MatroyshkaBatchTopKSAE
+from circuits.dictionary_learning.trainers.matryoshka_batch_top_k import (
+    MatryoshkaBatchTopKTrainer,
+    MatryoshkaBatchTopKSAE,
+)
 
 
 @dataclass
@@ -314,8 +317,6 @@ def collect_activations_batch(
     inputs_BL: torch.Tensor,
     dims: Int[Tensor, "num_dims"],
 ) -> tuple[Float[Tensor, "num_dims batch_size max_length"], Int[Tensor, "batch_size max_length"]]:
-    
-
     with ae_bundle.model.trace(inputs_BL[0:1, :1]):
         temp_output = ae_bundle.submodule.output.save()
 
@@ -339,7 +340,9 @@ def collect_activations_batch(
         ].save()  # Shape: (batch_size, max_length, dim_count)
 
     cur_activations_BLF = cur_activations_BLF.value
-    assert len(cur_activations_BLF.shape) == 3, "cur_activations_BLF shape is not 3D, check output is tuple (refer to evaluation.py)"
+    assert len(cur_activations_BLF.shape) == 3, (
+        "cur_activations_BLF shape is not 3D, check output is tuple (refer to evaluation.py)"
+    )
     cur_activations_FBL = rearrange(
         cur_activations_BLF, "b n d -> d b n"
     )  # Shape: (dim_count, batch_size, max_length)

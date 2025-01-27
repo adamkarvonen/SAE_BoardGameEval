@@ -22,7 +22,10 @@ from circuits.dictionary_learning.trainers.gated_anneal import GatedAnnealTraine
 from circuits.dictionary_learning.trainers.gdm import GatedSAETrainer
 
 from circuits.dictionary_learning.trainers.top_k import AutoEncoderTopK, TopKTrainer
-from circuits.dictionary_learning.trainers.matroyshka_batch_top_k import MatroyshkaBatchTopKSAE, MatroyshkaBatchTopKTrainer
+from circuits.dictionary_learning.trainers.matryoshka_batch_top_k import (
+    MatryoshkaBatchTopKSAE,
+    MatryoshkaBatchTopKTrainer,
+)
 from circuits.dictionary_learning.utils import hf_dataset_to_generator, zst_to_generator
 from circuits.dictionary_learning.buffer import ActivationBuffer, NNsightActivationBuffer
 from circuits.dictionary_learning.dictionary import (
@@ -53,7 +56,7 @@ def get_args():
     parser.add_argument(
         "--trainer_type",
         type=str,
-        choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k", "matroyshka"],
+        choices=["standard", "p_anneal", "gated", "gated_anneal", "top_k", "matryoshka"],
         required=True,
         help="run sweep on this trainer",
     )
@@ -109,7 +112,7 @@ def run_sae_batch(
     llm_batch_size = 64  # 256 for A100 GPU, 64 for 1080ti
     sae_batch_size = 8192
 
-    num_tokens = 150_000_000
+    num_tokens = 300_000_000
 
     activation_buffer = NNsightActivationBuffer(
         data,
@@ -142,7 +145,7 @@ def run_sae_batch(
     # grid search sweep
 
     learning_rate_ = [3e-4]
-    expansion_factor_ = (2 ** t.arange(3, 5)).tolist()
+    expansion_factor_ = [8, 16]
     sparsity_queue_length_ = [10]
     anneal_start_ = [10000]
     n_sparsity_updates_ = [10]
@@ -340,8 +343,8 @@ def run_sae_batch(
                     "device": device,
                 }
             )
-    elif trainer_type == "matroyshka":
-        k_ = [20, 40, 60, 80, 160, 320]
+    elif trainer_type == "matryoshka":
+        k_ = [int(k) for k in t.linspace(10, 400, 20)]
         param_combinations = itertools.product(expansion_factor_, k_)
 
         print(f"Sweep parameters for {trainer_type}: ")
@@ -349,30 +352,28 @@ def run_sae_batch(
 
         for i, param_setting in enumerate(param_combinations):
             expansion_factor, k = param_setting
-            for weights_temperature in [1.0, 2.0, 100.0]:
-                trainer_configs.append(
-                    {
-                        "trainer": MatroyshkaBatchTopKTrainer,
-                        "dict_class": MatroyshkaBatchTopKSAE,
-                        "activation_dim": activation_dim,
-                        "dict_size": expansion_factor * activation_dim,
-                        "group_fractions": [
-                            (1 / 32),
-                            (1 / 16),
-                            (1 / 8),
-                            (1 / 4),
-                            ((1 / 2) + (1 / 32)),
-                        ],
-                        "weights_temperature": weights_temperature,
-                        "k": k,
-                        "steps": steps,
-                        "seed": seed,
-                        "layer": layer,
-                        "lm_name": model_name,
-                        "wandb_name": f"MatroyshkaBatchTopKTrainer-{model_type}-{i}",
-                        "device": device,
-                    }
-                )
+            trainer_configs.append(
+                {
+                    "trainer": MatryoshkaBatchTopKTrainer,
+                    "dict_class": MatryoshkaBatchTopKSAE,
+                    "activation_dim": activation_dim,
+                    "dict_size": expansion_factor * activation_dim,
+                    "group_fractions": [
+                        (1 / 32),
+                        (1 / 16),
+                        (1 / 8),
+                        (1 / 4),
+                        ((1 / 2) + (1 / 32)),
+                    ],
+                    "k": k,
+                    "steps": steps,
+                    "seed": seed,
+                    "layer": layer,
+                    "lm_name": model_name,
+                    "wandb_name": f"MatryoshkaBatchTopKTrainer-{model_type}-{i}",
+                    "device": device,
+                }
+            )
     else:
         raise ValueError("Unknown trainer type: ", trainer_type)
 
